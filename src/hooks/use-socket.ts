@@ -1,0 +1,43 @@
+"use client";
+
+import { useEffect, useState } from "react";
+import { io, Socket } from "socket.io-client";
+
+export function useSocket(tenantId: string) {
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+
+  useEffect(() => {
+    if (!tenantId) return;
+
+    // Connect to the WebSocket server
+    const socketUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL || "http://localhost:3001";
+    const socketInstance = io(socketUrl);
+
+    const timer = setTimeout(() => {
+      setSocket(socketInstance);
+    }, 0);
+
+    socketInstance.on("connect", () => {
+      setIsConnected(true);
+      console.log("🔌 Connected to WebSocket server");
+      // Join the tenant's room
+      socketInstance.emit("join", tenantId);
+    });
+
+    socketInstance.on("disconnect", () => {
+      setIsConnected(false);
+      console.log("🔌 Disconnected from WebSocket server");
+    });
+
+    return () => {
+      clearTimeout(timer);
+      socketInstance.disconnect();
+    };
+  }, [tenantId]);
+
+  return {
+    socket,
+    isConnected,
+  };
+}

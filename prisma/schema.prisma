@@ -1,0 +1,208 @@
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Multi-tenant ───────────────────────────────────────────
+
+model Tenant {
+  id        String   @id @default(uuid())
+  name      String
+  slug      String   @unique
+  active    Boolean  @default(true)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  categories Category[]
+  products   Product[]
+  orders     Order[]
+  customers  Customer[]
+  users      User[]
+  botSetting BotSetting?
+
+  @@map("tenants")
+}
+
+// ─── IA / Bot Configuration ─────────────────────────────────
+
+enum LLMProvider {
+  DEEPSEEK
+  GEMINI
+  OPENAI
+}
+
+model BotSetting {
+  tenantId        String      @id @map("tenant_id")
+  tenant          Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  llmProvider     LLMProvider @default(DEEPSEEK) @map("llm_provider")
+  llmApiKey       String      @default("") @map("llm_api_key")
+  llmModel        String      @default("deepseek-chat") @map("llm_model")
+  systemPrompt    String      @default("") @map("system_prompt") @db.Text
+  debounceSeconds Int         @default(5) @map("debounce_seconds")
+  sessionTimeout       Int         @default(1800) @map("session_timeout") // 30 min default
+  messageContextLimit  Int         @default(15) @map("message_context_limit")
+  isActive             Boolean     @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("bot_settings")
+}
+
+// ─── Customers & Chat ───────────────────────────────────────
+
+model Customer {
+  id               String   @id @default(uuid())
+  tenantId         String   @map("tenant_id")
+  tenant           Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  phone            String
+  name             String?
+  isHumanAttending Boolean  @default(false) @map("is_human_attending")
+  activeOrderId    String?  @map("active_order_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  orders       Order[]
+  chatMessages ChatMessage[]
+
+  @@unique([tenantId, phone])
+  @@map("customers")
+}
+
+enum MessageSender {
+  USER
+  BOT
+  HUMAN
+}
+
+model ChatMessage {
+  id         String        @id @default(uuid())
+  customerId String        @map("customer_id")
+  customer   Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  sender     MessageSender
+  content    String        @db.Text
+  createdAt  DateTime      @default(now()) @map("created_at")
+
+  @@index([customerId, createdAt])
+  @@map("chat_messages")
+}
+
+// ─── Cardápio (Menu) ────────────────────────────────────────
+
+model Category {
+  id       String  @id @default(uuid())
+  tenantId String  @map("tenant_id")
+  tenant   Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  sortOrder   Int     @default(0) @map("sort_order")
+  isActive    Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  products Product[]
+
+  @@map("categories")
+}
+
+model Product {
+  id         String   @id @default(uuid())
+  tenantId   String   @map("tenant_id")
+  tenant     Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  categoryId String?  @map("category_id")
+  category   Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  name        String
+  description String?
+  price       Float
+  imageUrl    String?  @map("image_url")
+  isAvailable Boolean  @default(true) @map("is_available")
+  sortOrder   Int      @default(0) @map("sort_order")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  orderItems OrderItem[]
+
+  @@map("products")
+}
+
+// ─── Pedidos (Orders) ───────────────────────────────────────
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  DISPATCHED
+  DELIVERED
+  CANCELLED
+}
+
+enum OrderSource {
+  WHATSAPP
+  WEB
+}
+
+model Order {
+  id         String      @id @default(uuid())
+  tenantId   String      @map("tenant_id")
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  customerId String      @map("customer_id")
+  customer   Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+
+  status          OrderStatus @default(PENDING)
+  source          OrderSource
+  total           Float       @default(0)
+  deliveryAddress Json?       @map("delivery_address")
+  notes           String?     @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  items OrderItem[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, createdAt])
+  @@map("orders")
+}
+
+model OrderItem {
+  id        String @id @default(uuid())
+  orderId   String @map("order_id")
+  order     Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String @map("product_id")
+  product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  quantity Int
+  price    Float
+  notes    String?
+
+  @@map("order_items")
+}
+
+// ─── Usuários (Users) ────────────────────────────────────────
+
+model User {
+  id           String   @id @default(uuid())
+  tenantId     String   @map("tenant_id")
+  tenant       Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String?
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}

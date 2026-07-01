@@ -1,0 +1,101 @@
+2026-07-01T19:08:43.111Z
+Error: 
+Invalid `__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$prisma$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["prisma"].botSetting.upsert()` invocation in
+/Users/danilosantos/Documents/Workspace/agente-atendimento/.next/dev/server/chunks/[root-of-the-server]__0dbt5ud._.js:494:172
+
+  491         status: 400
+  492     });
+  493 }
+→ 494 const settings = await __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$prisma$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["prisma"].botSetting.upsert({
+        where: {
+          tenantId: "e2c20d9b-b1a5-4c98-8e60-bc2912ceb59d"
+        },
+        update: {
+          llmProvider: "GEMINI",
+          llmModel: "gemini-3.5-flash",
+          systemPrompt: "Você é o atendente virtual da Padaria do Zé. Seja educado, simpático e objetivo.\nAjude os clientes a fazer pedidos do nosso cardápio.\nSempre confirme o pedido antes de finalizar.\nPergunte o endereço de entrega e forma de pagamento.",
+          debounceSeconds: 5,
+          sessionTimeout: 1800,
+          messageContextLimit: 5,
+          isActive: true
+        },
+        create: {
+          tenantId: "e2c20d9b-b1a5-4c98-8e60-bc2912ceb59d",
+          llmProvider: "GEMINI",
+          llmApiKey: "",
+          llmModel: "gemini-3.5-flash",
+          systemPrompt: "Você é o atendente virtual da Padaria do Zé. Seja educado, simpático e objetivo.\nAjude os clientes a fazer pedidos do nosso cardápio.\nSempre confirme o pedido antes de finalizar.\nPergunte o endereço de entrega e forma de pagamento.",
+          debounceSeconds: 5,
+          sessionTimeout: 1800,
+          messageContextLimit: 5,
+          ~~~~~~~~~~~~~~~~~~~
+          isActive: true,
+      ?   createdAt?: DateTime,
+      ?   updatedAt?: DateTime
+        }
+      })
+
+Unknown argument `messageContextLimit`. Available options are marked with ?.
+Stack: PrismaClientValidationError: 
+Invalid `__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$prisma$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["prisma"].botSetting.upsert()` invocation in
+/Users/danilosantos/Documents/Workspace/agente-atendimento/.next/dev/server/chunks/[root-of-the-server]__0dbt5ud._.js:494:172
+
+  491         status: 400
+  492     });
+  493 }
+→ 494 const settings = await __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$prisma$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["prisma"].botSetting.upsert({
+        where: {
+          tenantId: "e2c20d9b-b1a5-4c98-8e60-bc2912ceb59d"
+        },
+        update: {
+          llmProvider: "GEMINI",
+          llmModel: "gemini-3.5-flash",
+          systemPrompt: "Você é o atendente virtual da Padaria do Zé. Seja educado, simpático e objetivo.\nAjude os clientes a fazer pedidos do nosso cardápio.\nSempre confirme o pedido antes de finalizar.\nPergunte o endereço de entrega e forma de pagamento.",
+          debounceSeconds: 5,
+          sessionTimeout: 1800,
+          messageContextLimit: 5,
+          isActive: true
+        },
+        create: {
+          tenantId: "e2c20d9b-b1a5-4c98-8e60-bc2912ceb59d",
+          llmProvider: "GEMINI",
+          llmApiKey: "",
+          llmModel: "gemini-3.5-flash",
+          systemPrompt: "Você é o atendente virtual da Padaria do Zé. Seja educado, simpático e objetivo.\nAjude os clientes a fazer pedidos do nosso cardápio.\nSempre confirme o pedido antes de finalizar.\nPergunte o endereço de entrega e forma de pagamento.",
+          debounceSeconds: 5,
+          sessionTimeout: 1800,
+          messageContextLimit: 5,
+          ~~~~~~~~~~~~~~~~~~~
+          isActive: true,
+      ?   createdAt?: DateTime,
+      ?   updatedAt?: DateTime
+        }
+      })
+
+Unknown argument `messageContextLimit`. Available options are marked with ?.
+    at ar (/Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/@prisma/client/runtime/client.js:10:1374)
+    at zr.handleRequestError (/Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/@prisma/client/runtime/client.js:65:7929)
+    at zr.handleAndLogRequestError (/Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/@prisma/client/runtime/client.js:65:7581)
+    at zr.request (/Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/@prisma/client/runtime/client.js:65:7288)
+    at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
+    at async a (/Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/@prisma/client/runtime/client.js:75:6862)
+    at async PUT (/Users/danilosantos/Documents/Workspace/agente-atendimento/.next/dev/server/chunks/[root-of-the-server]__0dbt5ud._.js:494:26)
+    at async AppRouteRouteModule.do (/Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:5:40131)
+    at async AppRouteRouteModule.handle (/Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:5:47411)
+    at async responseGenerator (/Users/danilosantos/Documents/Workspace/agente-atendimento/.next/dev/server/chunks/[root-of-the-server]__17es39x._.js:18000:38)
+    at async AppRouteRouteModule.handleResponse (/Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:1:228552)
+    at async handleResponse (/Users/danilosantos/Documents/Workspace/agente-atendimento/.next/dev/server/chunks/[root-of-the-server]__17es39x._.js:18063:32)
+    at async Module.handler (/Users/danilosantos/Documents/Workspace/agente-atendimento/.next/dev/server/chunks/[root-of-the-server]__17es39x._.js:18117:13)
+    at async DevServer.renderToResponseWithComponentsImpl (/Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/next/dist/server/base-server.js:1462:9)
+    at async DevServer.renderPageComponent (/Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/next/dist/server/base-server.js:1514:24)
+    at async DevServer.renderToResponseImpl (/Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/next/dist/server/base-server.js:1564:32)
+    at async DevServer.pipeImpl (/Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/next/dist/server/base-server.js:1044:25)
+    at async NextNodeServer.handleCatchallRenderRequest (/Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/next/dist/server/next-server.js:338:17)
+    at async DevServer.handleRequestImpl (/Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/next/dist/server/base-server.js:935:17)
+    at async /Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/next/dist/server/dev/next-dev-server.js:394:20
+    at async Span.traceAsyncFn (/Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/next/dist/trace/trace.js:164:20)
+    at async DevServer.handleRequest (/Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/next/dist/server/dev/next-dev-server.js:390:24)
+    at async invokeRender (/Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/next/dist/server/lib/router-server.js:266:21)
+    at async handleRequest (/Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/next/dist/server/lib/router-server.js:465:24)
+    at async requestHandlerImpl (/Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/next/dist/server/lib/router-server.js:514:13)
+    at async Server.requestListener (/Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/next/dist/server/lib/start-server.js:225:13)
