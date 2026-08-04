@@ -88,8 +88,13 @@ export async function POST(request: Request) {
       })
     );
 
-    // TODO: Phase 3 — Implement debounce logic + LLM processing here
-    // For now, messages are saved and visible in the Live Chat panel
+    // Trigger Bot Pipeline asynchronously (debounce and processing happens there)
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+    fetch(`${appUrl}/api/chat/process-bot`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ customerId: customer.id, message: text }),
+    }).catch(err => console.error("Error triggering bot pipeline:", err));
 
     return NextResponse.json({ status: "received", customerId: customer.id });
   } catch (error) {

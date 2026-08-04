@@ -46,6 +46,8 @@ model BotSetting {
   debounceSeconds Int         @default(5) @map("debounce_seconds")
   sessionTimeout       Int         @default(1800) @map("session_timeout") // 30 min default
   messageContextLimit  Int         @default(15) @map("message_context_limit")
+  maxOutputTokens      Int         @default(4096) @map("max_output_tokens")
+  temperature          Float       @default(0.7) @map("temperature")
   isActive             Boolean     @default(true) @map("is_active")
 
   createdAt DateTime @default(now()) @map("created_at")

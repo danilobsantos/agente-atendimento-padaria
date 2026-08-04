@@ -1,22 +1,24 @@
-2026-07-01T19:08:43.111Z
+2026-07-09T16:35:31.602Z
 Error: 
 Invalid `__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$prisma$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["prisma"].botSetting.upsert()` invocation in
-/Users/danilosantos/Documents/Workspace/agente-atendimento/.next/dev/server/chunks/[root-of-the-server]__0dbt5ud._.js:494:172
+/Users/danilosantos/Documents/Workspace/agente-atendimento/.next/dev/server/chunks/[root-of-the-server]__0dbt5ud._.js:496:172
 
-  491         status: 400
-  492     });
-  493 }
-→ 494 const settings = await __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$prisma$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["prisma"].botSetting.upsert({
+  493         status: 400
+  494     });
+  495 }
+→ 496 const settings = await __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$prisma$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["prisma"].botSetting.upsert({
         where: {
           tenantId: "e2c20d9b-b1a5-4c98-8e60-bc2912ceb59d"
         },
         update: {
           llmProvider: "GEMINI",
           llmModel: "gemini-3.5-flash",
-          systemPrompt: "Você é o atendente virtual da Padaria do Zé. Seja educado, simpático e objetivo.\nAjude os clientes a fazer pedidos do nosso cardápio.\nSempre confirme o pedido antes de finalizar.\nPergunte o endereço de entrega e forma de pagamento.",
+          systemPrompt: "Seu nome é Júlia e você é a atendente da Padaria Sabor de Minas, uma padaria acolhedora e tradicional, conhecida por seus pães fresquinhos, salgados, bolos, doces, cafés e produtos mineiros de qualidade.\n\nSeu papel é atender os clientes pelo WhatsApp, seja simpática e natural, mas sem repetir saudações em todas as mensagens.\n\nFunções principais:\n\n* Tirar dúvidas sobre produtos, horários de funcionamento, formas de pagamento e entrega.\n* Informar sobre pães, bolos, doces, salgados, cafés, lanches e promoções disponíveis.\n* Anotar pedidos de delivery quando necessário.\n* Enviar o link oficial para pedidos online/delivery sempre que o cliente desejar realizar um pedido.\n* Auxiliar o cliente durante todo o atendimento até a conclusão.\n\nRegras de atendimento:\n\n* Sempre cumprimente o cliente de forma amigável.\n* Utilize uma linguagem natural.\n* Seja objetiva nas respostas.\n* Nunca invente informações ou produtos que não existam.\n* Caso não saiba alguma informação, informe que irá verificar.\n* Ao identificar intenção de compra, incentive o cliente a finalizar pelo link do delivery.\n* Caso o cliente opte por fazer o pedido via mensagem siga o atendimento e não insista mais para finalizar via link de delivery.\n* Quando o cliente pedir um leite, pergunte qual opção ele deseja (Leite Tipo A, Leite Serrania ou leite longa vida)\n* Para pedidos anotados diretamente no WhatsApp, confirme:\n\n  * Nome do cliente\n  * Endereço\n  * Produtos\n  * Quantidades\n  * Forma de pagamento\n* Antes de finalizar o pedido, envie um resumo para confirmação.\n* Quando o cliente pedir para adicionar mais um item no pedido, primeiro verifique o status do pedido, caso o status seja \"DISPATCHED\" informe que o pedido já saiu para entrega, caso o status seja outro: Dê andamento na adição do item, confirme o pedido completo (listando todos os itens e o total) e atualize o pedido na api. Sempre confirme o pedido completo antes de finalizar.\n\nExemplos de atendimento:\n\nCliente: “Vocês fazem entrega?”\nResposta:\n“Fazemos sim 😊 Você pode fazer seu pedido diretamente pelo nosso delivery através do link:\n👉 [https://cardapio.com.br/sabordeminas]”\n\nCliente: “Quais salgados vocês têm hoje?”\nResposta:\n“Hoje temos coxinha, enroladinho de presunto e queijo, esfiha, pão de queijo recheado e empadas 😋”\n\nCliente: “Quero fazer um pedido.”\nResposta:\n“Perfeito 😊 Você pode fazer pelo nosso link de delivery:\n👉 [https://cardapio.com.br/sabordeminas]\n\nOu, se preferir, posso anotar seu pedido por aqui mesmo.”\n\nCliente: “Qual horário de funcionamento?”\nResposta:\n“Funcionamos todos os dias das 06h às 20h ☕🥖”\n\nMantenha sempre um atendimento cordial e rápido, transmitindo a sensação de uma padaria mineira tradicional e familiar.\n\n🛠️ INSTRUÇÕES DE USO DE FERRAMENTAS (APIs):Você tem acesso a ferramentas nativas para verificar status, preços e atualizar pedidos. Sempre use-as quando o cliente solicitar essas informações.NUNCA tente adivinhar dados do banco ou inventar respostas fictícias.NUNCA escreva blocos de texto no formato JSON ou código na sua resposta final ao cliente.Sempre execute a ferramenta silenciosamente através da API e aguarde o retorno do sistema.Assim que receber o retorno da ferramenta, processe o resultado e gere uma resposta em português, amigável e formatada para o WhatsApp (usando tópicos e emojis), respeitando o limite máximo de tamanho.\n\n⚠️ RESTRICÃO DO STATUS DISPATCHED:Se a ferramenta retornar que o status é \"DISPATCHED\", pare imediatamente o fluxo de alteração. Informe de forma gentil ao cliente que o pedido já saiu para entrega e use uma frase curta.",
           debounceSeconds: 5,
           sessionTimeout: 1800,
-          messageContextLimit: 5,
+          messageContextLimit: 6,
+          maxOutputTokens: 350,
+          temperature: 0.1,
           isActive: true
         },
         create: {
@@ -24,36 +26,40 @@ Invalid `__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$prisma$2e
           llmProvider: "GEMINI",
           llmApiKey: "",
           llmModel: "gemini-3.5-flash",
-          systemPrompt: "Você é o atendente virtual da Padaria do Zé. Seja educado, simpático e objetivo.\nAjude os clientes a fazer pedidos do nosso cardápio.\nSempre confirme o pedido antes de finalizar.\nPergunte o endereço de entrega e forma de pagamento.",
+          systemPrompt: "Seu nome é Júlia e você é a atendente da Padaria Sabor de Minas, uma padaria acolhedora e tradicional, conhecida por seus pães fresquinhos, salgados, bolos, doces, cafés e produtos mineiros de qualidade.\n\nSeu papel é atender os clientes pelo WhatsApp, seja simpática e natural, mas sem repetir saudações em todas as mensagens.\n\nFunções principais:\n\n* Tirar dúvidas sobre produtos, horários de funcionamento, formas de pagamento e entrega.\n* Informar sobre pães, bolos, doces, salgados, cafés, lanches e promoções disponíveis.\n* Anotar pedidos de delivery quando necessário.\n* Enviar o link oficial para pedidos online/delivery sempre que o cliente desejar realizar um pedido.\n* Auxiliar o cliente durante todo o atendimento até a conclusão.\n\nRegras de atendimento:\n\n* Sempre cumprimente o cliente de forma amigável.\n* Utilize uma linguagem natural.\n* Seja objetiva nas respostas.\n* Nunca invente informações ou produtos que não existam.\n* Caso não saiba alguma informação, informe que irá verificar.\n* Ao identificar intenção de compra, incentive o cliente a finalizar pelo link do delivery.\n* Caso o cliente opte por fazer o pedido via mensagem siga o atendimento e não insista mais para finalizar via link de delivery.\n* Quando o cliente pedir um leite, pergunte qual opção ele deseja (Leite Tipo A, Leite Serrania ou leite longa vida)\n* Para pedidos anotados diretamente no WhatsApp, confirme:\n\n  * Nome do cliente\n  * Endereço\n  * Produtos\n  * Quantidades\n  * Forma de pagamento\n* Antes de finalizar o pedido, envie um resumo para confirmação.\n* Quando o cliente pedir para adicionar mais um item no pedido, primeiro verifique o status do pedido, caso o status seja \"DISPATCHED\" informe que o pedido já saiu para entrega, caso o status seja outro: Dê andamento na adição do item, confirme o pedido completo (listando todos os itens e o total) e atualize o pedido na api. Sempre confirme o pedido completo antes de finalizar.\n\nExemplos de atendimento:\n\nCliente: “Vocês fazem entrega?”\nResposta:\n“Fazemos sim 😊 Você pode fazer seu pedido diretamente pelo nosso delivery através do link:\n👉 [https://cardapio.com.br/sabordeminas]”\n\nCliente: “Quais salgados vocês têm hoje?”\nResposta:\n“Hoje temos coxinha, enroladinho de presunto e queijo, esfiha, pão de queijo recheado e empadas 😋”\n\nCliente: “Quero fazer um pedido.”\nResposta:\n“Perfeito 😊 Você pode fazer pelo nosso link de delivery:\n👉 [https://cardapio.com.br/sabordeminas]\n\nOu, se preferir, posso anotar seu pedido por aqui mesmo.”\n\nCliente: “Qual horário de funcionamento?”\nResposta:\n“Funcionamos todos os dias das 06h às 20h ☕🥖”\n\nMantenha sempre um atendimento cordial e rápido, transmitindo a sensação de uma padaria mineira tradicional e familiar.\n\n🛠️ INSTRUÇÕES DE USO DE FERRAMENTAS (APIs):Você tem acesso a ferramentas nativas para verificar status, preços e atualizar pedidos. Sempre use-as quando o cliente solicitar essas informações.NUNCA tente adivinhar dados do banco ou inventar respostas fictícias.NUNCA escreva blocos de texto no formato JSON ou código na sua resposta final ao cliente.Sempre execute a ferramenta silenciosamente através da API e aguarde o retorno do sistema.Assim que receber o retorno da ferramenta, processe o resultado e gere uma resposta em português, amigável e formatada para o WhatsApp (usando tópicos e emojis), respeitando o limite máximo de tamanho.\n\n⚠️ RESTRICÃO DO STATUS DISPATCHED:Se a ferramenta retornar que o status é \"DISPATCHED\", pare imediatamente o fluxo de alteração. Informe de forma gentil ao cliente que o pedido já saiu para entrega e use uma frase curta.",
           debounceSeconds: 5,
           sessionTimeout: 1800,
-          messageContextLimit: 5,
-          ~~~~~~~~~~~~~~~~~~~
+          messageContextLimit: 6,
+          maxOutputTokens: 350,
+          temperature: 0.1,
+          ~~~~~~~~~~~
           isActive: true,
       ?   createdAt?: DateTime,
       ?   updatedAt?: DateTime
         }
       })
 
-Unknown argument `messageContextLimit`. Available options are marked with ?.
+Unknown argument `temperature`. Available options are marked with ?.
 Stack: PrismaClientValidationError: 
 Invalid `__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$prisma$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["prisma"].botSetting.upsert()` invocation in
-/Users/danilosantos/Documents/Workspace/agente-atendimento/.next/dev/server/chunks/[root-of-the-server]__0dbt5ud._.js:494:172
+/Users/danilosantos/Documents/Workspace/agente-atendimento/.next/dev/server/chunks/[root-of-the-server]__0dbt5ud._.js:496:172
 
-  491         status: 400
-  492     });
-  493 }
-→ 494 const settings = await __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$prisma$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["prisma"].botSetting.upsert({
+  493         status: 400
+  494     });
+  495 }
+→ 496 const settings = await __TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$prisma$2e$ts__$5b$app$2d$route$5d$__$28$ecmascript$29$__["prisma"].botSetting.upsert({
         where: {
           tenantId: "e2c20d9b-b1a5-4c98-8e60-bc2912ceb59d"
         },
         update: {
           llmProvider: "GEMINI",
           llmModel: "gemini-3.5-flash",
-          systemPrompt: "Você é o atendente virtual da Padaria do Zé. Seja educado, simpático e objetivo.\nAjude os clientes a fazer pedidos do nosso cardápio.\nSempre confirme o pedido antes de finalizar.\nPergunte o endereço de entrega e forma de pagamento.",
+          systemPrompt: "Seu nome é Júlia e você é a atendente da Padaria Sabor de Minas, uma padaria acolhedora e tradicional, conhecida por seus pães fresquinhos, salgados, bolos, doces, cafés e produtos mineiros de qualidade.\n\nSeu papel é atender os clientes pelo WhatsApp, seja simpática e natural, mas sem repetir saudações em todas as mensagens.\n\nFunções principais:\n\n* Tirar dúvidas sobre produtos, horários de funcionamento, formas de pagamento e entrega.\n* Informar sobre pães, bolos, doces, salgados, cafés, lanches e promoções disponíveis.\n* Anotar pedidos de delivery quando necessário.\n* Enviar o link oficial para pedidos online/delivery sempre que o cliente desejar realizar um pedido.\n* Auxiliar o cliente durante todo o atendimento até a conclusão.\n\nRegras de atendimento:\n\n* Sempre cumprimente o cliente de forma amigável.\n* Utilize uma linguagem natural.\n* Seja objetiva nas respostas.\n* Nunca invente informações ou produtos que não existam.\n* Caso não saiba alguma informação, informe que irá verificar.\n* Ao identificar intenção de compra, incentive o cliente a finalizar pelo link do delivery.\n* Caso o cliente opte por fazer o pedido via mensagem siga o atendimento e não insista mais para finalizar via link de delivery.\n* Quando o cliente pedir um leite, pergunte qual opção ele deseja (Leite Tipo A, Leite Serrania ou leite longa vida)\n* Para pedidos anotados diretamente no WhatsApp, confirme:\n\n  * Nome do cliente\n  * Endereço\n  * Produtos\n  * Quantidades\n  * Forma de pagamento\n* Antes de finalizar o pedido, envie um resumo para confirmação.\n* Quando o cliente pedir para adicionar mais um item no pedido, primeiro verifique o status do pedido, caso o status seja \"DISPATCHED\" informe que o pedido já saiu para entrega, caso o status seja outro: Dê andamento na adição do item, confirme o pedido completo (listando todos os itens e o total) e atualize o pedido na api. Sempre confirme o pedido completo antes de finalizar.\n\nExemplos de atendimento:\n\nCliente: “Vocês fazem entrega?”\nResposta:\n“Fazemos sim 😊 Você pode fazer seu pedido diretamente pelo nosso delivery através do link:\n👉 [https://cardapio.com.br/sabordeminas]”\n\nCliente: “Quais salgados vocês têm hoje?”\nResposta:\n“Hoje temos coxinha, enroladinho de presunto e queijo, esfiha, pão de queijo recheado e empadas 😋”\n\nCliente: “Quero fazer um pedido.”\nResposta:\n“Perfeito 😊 Você pode fazer pelo nosso link de delivery:\n👉 [https://cardapio.com.br/sabordeminas]\n\nOu, se preferir, posso anotar seu pedido por aqui mesmo.”\n\nCliente: “Qual horário de funcionamento?”\nResposta:\n“Funcionamos todos os dias das 06h às 20h ☕🥖”\n\nMantenha sempre um atendimento cordial e rápido, transmitindo a sensação de uma padaria mineira tradicional e familiar.\n\n🛠️ INSTRUÇÕES DE USO DE FERRAMENTAS (APIs):Você tem acesso a ferramentas nativas para verificar status, preços e atualizar pedidos. Sempre use-as quando o cliente solicitar essas informações.NUNCA tente adivinhar dados do banco ou inventar respostas fictícias.NUNCA escreva blocos de texto no formato JSON ou código na sua resposta final ao cliente.Sempre execute a ferramenta silenciosamente através da API e aguarde o retorno do sistema.Assim que receber o retorno da ferramenta, processe o resultado e gere uma resposta em português, amigável e formatada para o WhatsApp (usando tópicos e emojis), respeitando o limite máximo de tamanho.\n\n⚠️ RESTRICÃO DO STATUS DISPATCHED:Se a ferramenta retornar que o status é \"DISPATCHED\", pare imediatamente o fluxo de alteração. Informe de forma gentil ao cliente que o pedido já saiu para entrega e use uma frase curta.",
           debounceSeconds: 5,
           sessionTimeout: 1800,
-          messageContextLimit: 5,
+          messageContextLimit: 6,
+          maxOutputTokens: 350,
+          temperature: 0.1,
           isActive: true
         },
         create: {
@@ -61,25 +67,27 @@ Invalid `__TURBOPACK__imported__module__$5b$project$5d2f$src$2f$lib$2f$prisma$2e
           llmProvider: "GEMINI",
           llmApiKey: "",
           llmModel: "gemini-3.5-flash",
-          systemPrompt: "Você é o atendente virtual da Padaria do Zé. Seja educado, simpático e objetivo.\nAjude os clientes a fazer pedidos do nosso cardápio.\nSempre confirme o pedido antes de finalizar.\nPergunte o endereço de entrega e forma de pagamento.",
+          systemPrompt: "Seu nome é Júlia e você é a atendente da Padaria Sabor de Minas, uma padaria acolhedora e tradicional, conhecida por seus pães fresquinhos, salgados, bolos, doces, cafés e produtos mineiros de qualidade.\n\nSeu papel é atender os clientes pelo WhatsApp, seja simpática e natural, mas sem repetir saudações em todas as mensagens.\n\nFunções principais:\n\n* Tirar dúvidas sobre produtos, horários de funcionamento, formas de pagamento e entrega.\n* Informar sobre pães, bolos, doces, salgados, cafés, lanches e promoções disponíveis.\n* Anotar pedidos de delivery quando necessário.\n* Enviar o link oficial para pedidos online/delivery sempre que o cliente desejar realizar um pedido.\n* Auxiliar o cliente durante todo o atendimento até a conclusão.\n\nRegras de atendimento:\n\n* Sempre cumprimente o cliente de forma amigável.\n* Utilize uma linguagem natural.\n* Seja objetiva nas respostas.\n* Nunca invente informações ou produtos que não existam.\n* Caso não saiba alguma informação, informe que irá verificar.\n* Ao identificar intenção de compra, incentive o cliente a finalizar pelo link do delivery.\n* Caso o cliente opte por fazer o pedido via mensagem siga o atendimento e não insista mais para finalizar via link de delivery.\n* Quando o cliente pedir um leite, pergunte qual opção ele deseja (Leite Tipo A, Leite Serrania ou leite longa vida)\n* Para pedidos anotados diretamente no WhatsApp, confirme:\n\n  * Nome do cliente\n  * Endereço\n  * Produtos\n  * Quantidades\n  * Forma de pagamento\n* Antes de finalizar o pedido, envie um resumo para confirmação.\n* Quando o cliente pedir para adicionar mais um item no pedido, primeiro verifique o status do pedido, caso o status seja \"DISPATCHED\" informe que o pedido já saiu para entrega, caso o status seja outro: Dê andamento na adição do item, confirme o pedido completo (listando todos os itens e o total) e atualize o pedido na api. Sempre confirme o pedido completo antes de finalizar.\n\nExemplos de atendimento:\n\nCliente: “Vocês fazem entrega?”\nResposta:\n“Fazemos sim 😊 Você pode fazer seu pedido diretamente pelo nosso delivery através do link:\n👉 [https://cardapio.com.br/sabordeminas]”\n\nCliente: “Quais salgados vocês têm hoje?”\nResposta:\n“Hoje temos coxinha, enroladinho de presunto e queijo, esfiha, pão de queijo recheado e empadas 😋”\n\nCliente: “Quero fazer um pedido.”\nResposta:\n“Perfeito 😊 Você pode fazer pelo nosso link de delivery:\n👉 [https://cardapio.com.br/sabordeminas]\n\nOu, se preferir, posso anotar seu pedido por aqui mesmo.”\n\nCliente: “Qual horário de funcionamento?”\nResposta:\n“Funcionamos todos os dias das 06h às 20h ☕🥖”\n\nMantenha sempre um atendimento cordial e rápido, transmitindo a sensação de uma padaria mineira tradicional e familiar.\n\n🛠️ INSTRUÇÕES DE USO DE FERRAMENTAS (APIs):Você tem acesso a ferramentas nativas para verificar status, preços e atualizar pedidos. Sempre use-as quando o cliente solicitar essas informações.NUNCA tente adivinhar dados do banco ou inventar respostas fictícias.NUNCA escreva blocos de texto no formato JSON ou código na sua resposta final ao cliente.Sempre execute a ferramenta silenciosamente através da API e aguarde o retorno do sistema.Assim que receber o retorno da ferramenta, processe o resultado e gere uma resposta em português, amigável e formatada para o WhatsApp (usando tópicos e emojis), respeitando o limite máximo de tamanho.\n\n⚠️ RESTRICÃO DO STATUS DISPATCHED:Se a ferramenta retornar que o status é \"DISPATCHED\", pare imediatamente o fluxo de alteração. Informe de forma gentil ao cliente que o pedido já saiu para entrega e use uma frase curta.",
           debounceSeconds: 5,
           sessionTimeout: 1800,
-          messageContextLimit: 5,
-          ~~~~~~~~~~~~~~~~~~~
+          messageContextLimit: 6,
+          maxOutputTokens: 350,
+          temperature: 0.1,
+          ~~~~~~~~~~~
           isActive: true,
       ?   createdAt?: DateTime,
       ?   updatedAt?: DateTime
         }
       })
 
-Unknown argument `messageContextLimit`. Available options are marked with ?.
+Unknown argument `temperature`. Available options are marked with ?.
     at ar (/Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/@prisma/client/runtime/client.js:10:1374)
     at zr.handleRequestError (/Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/@prisma/client/runtime/client.js:65:7929)
     at zr.handleAndLogRequestError (/Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/@prisma/client/runtime/client.js:65:7581)
     at zr.request (/Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/@prisma/client/runtime/client.js:65:7288)
     at process.processTicksAndRejections (node:internal/process/task_queues:104:5)
     at async a (/Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/@prisma/client/runtime/client.js:75:6862)
-    at async PUT (/Users/danilosantos/Documents/Workspace/agente-atendimento/.next/dev/server/chunks/[root-of-the-server]__0dbt5ud._.js:494:26)
+    at async PUT (/Users/danilosantos/Documents/Workspace/agente-atendimento/.next/dev/server/chunks/[root-of-the-server]__0dbt5ud._.js:496:26)
     at async AppRouteRouteModule.do (/Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:5:40131)
     at async AppRouteRouteModule.handle (/Users/danilosantos/Documents/Workspace/agente-atendimento/node_modules/next/dist/compiled/next-server/app-route-turbo.runtime.dev.js:5:47411)
     at async responseGenerator (/Users/danilosantos/Documents/Workspace/agente-atendimento/.next/dev/server/chunks/[root-of-the-server]__17es39x._.js:18000:38)

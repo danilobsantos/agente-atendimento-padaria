@@ -23,17 +23,85 @@ export async function GET(_request: Request, { params }: RouteParams) {
   return NextResponse.json(order);
 }
 
-// PATCH /api/orders/[id] — Update order status
+// PATCH /api/orders/[id] — Update order status or items
 export async function PATCH(request: Request, { params }: RouteParams) {
   const { id } = await params;
   const body = await request.json();
 
   try {
+    // Fetch current status to check transition constraints
+    const existingOrder = await prisma.order.findUnique({
+      where: { id },
+      select: { status: true },
+    });
+
+    if (!existingOrder) {
+      return NextResponse.json({ error: "Order not found" }, { status: 404 });
+    }
+
+    // Constraints:
+    // 1. If status is DISPATCHED, only allow updating status to DELIVERED.
+    if (existingOrder.status === "DISPATCHED" && body.status !== "DELIVERED") {
+      return NextResponse.json(
+        { error: "Pedidos com status 'Saiu pra entrega' não podem ser alterados ou cancelados." },
+        { status: 400 }
+      );
+    }
+
+    // 2. If status is DELIVERED or CANCELLED, no alterations allowed.
+    if (existingOrder.status === "DELIVERED" || existingOrder.status === "CANCELLED") {
+      return NextResponse.json(
+        { error: "Pedidos finalizados ou cancelados não podem ser alterados." },
+        { status: 400 }
+      );
+    }
+
+    let totalUpdate = {};
+    let itemsUpdate = {};
+
+    if (body.items !== undefined) {
+      if (!Array.isArray(body.items)) {
+        return NextResponse.json({ error: "O campo 'items' deve ser um array." }, { status: 400 });
+      }
+
+      if (body.items.length === 0) {
+        return NextResponse.json({ error: "Um pedido deve ter pelo menos um item." }, { status: 400 });
+      }
+
+      // Fetch product prices to calculate total
+      const productIds = body.items.map((i: { productId: string }) => i.productId);
+      const products = await prisma.product.findMany({
+        where: { id: { in: productIds } },
+      });
+
+      const productPriceMap = new Map(products.map((p: { id: string; price: number }) => [p.id, p.price]));
+
+      const newOrderItems = body.items.map((item: { productId: string; quantity: number; notes?: string }) => ({
+        productId: item.productId,
+        quantity: item.quantity,
+        price: productPriceMap.get(item.productId) ?? 0,
+        notes: item.notes || null,
+      }));
+
+      const total = newOrderItems.reduce(
+        (sum: number, item: { price: number; quantity: number }) => sum + item.price * item.quantity,
+        0
+      );
+
+      totalUpdate = { total };
+      itemsUpdate = {
+        deleteMany: {},
+        create: newOrderItems,
+      };
+    }
+
     const order = await prisma.order.update({
       where: { id },
       data: {
         ...(body.status !== undefined && { status: body.status }),
         ...(body.notes !== undefined && { notes: body.notes }),
+        ...totalUpdate,
+        ...(body.items !== undefined && { items: itemsUpdate }),
       },
       include: {
         customer: true,
@@ -49,8 +117,16 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       });
     }
 
+    // Publish order update to Redis (for Kanban board update)
+    const { redisPub } = await import("@/lib/redis");
+    await redisPub.publish(
+      `tenant:${order.tenantId}:order`,
+      JSON.stringify({ orderId: order.id, status: order.status, event: "ORDER_STATUS_UPDATED" })
+    );
+
     return NextResponse.json(order);
-  } catch {
-    return NextResponse.json({ error: "Order not found" }, { status: 404 });
+  } catch (err: any) {
+    console.error("Error in PATCH /api/orders/[id]:", err);
+    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
   }
 }

@@ -12,6 +12,8 @@ interface Settings {
   debounceSeconds: number;
   sessionTimeout: number;
   messageContextLimit: number;
+  maxOutputTokens: number;
+  temperature: number;
   isActive: boolean;
 }
 
@@ -23,6 +25,8 @@ export default function ConfigForm({ initialSettings }: { initialSettings: Setti
   const [debounce, setDebounce] = useState(initialSettings.debounceSeconds);
   const [sessionTimeout, setSessionTimeout] = useState(initialSettings.sessionTimeout || 1800);
   const [contextLimit, setContextLimit] = useState(initialSettings.messageContextLimit || 15);
+  const [maxOutputTokens, setMaxOutputTokens] = useState(initialSettings.maxOutputTokens || 4096);
+  const [temperature, setTemperature] = useState(initialSettings.temperature ?? 0.7);
   const [isActive, setIsActive] = useState(initialSettings.isActive);
 
   const [isSaving, setIsSaving] = useState(false);
@@ -56,6 +60,8 @@ export default function ConfigForm({ initialSettings }: { initialSettings: Setti
           debounceSeconds: debounce,
           sessionTimeout,
           messageContextLimit: contextLimit,
+          maxOutputTokens,
+          temperature,
           isActive,
         }),
       });
@@ -205,6 +211,54 @@ export default function ConfigForm({ initialSettings }: { initialSettings: Setti
           />
           <p className="text-xs text-[#8C7A6B] leading-relaxed">
             Número de mensagens anteriores da conversa enviadas para o cérebro da IA para dar contexto à resposta atual. Valores maiores dão mais memória ao robô, mas utilizam mais tokens.
+          </p>
+        </div>
+
+        <hr className="border-[#EBE2D5]/50" />
+
+        {/* Max Output Tokens */}
+        <div className="space-y-3">
+          <div className="flex justify-between items-center">
+            <label className="text-[11px] font-bold text-[#6B5A4B] uppercase tracking-wider block">
+              Tamanho Máximo da Resposta (Max Tokens)
+            </label>
+            <span className="text-sm font-extrabold text-amber-700">{maxOutputTokens} tokens</span>
+          </div>
+          <input
+            type="range"
+            min="256"
+            max="8192"
+            step="256"
+            value={maxOutputTokens}
+            onChange={(e) => setMaxOutputTokens(parseInt(e.target.value))}
+            className="w-full accent-amber-700 bg-[#FAF7F2] h-2 rounded-lg cursor-pointer border border-[#EBE2D5]"
+          />
+          <p className="text-xs text-[#8C7A6B] leading-relaxed">
+            Limite máximo de tokens na resposta gerada pela IA. Valores baixos podem cortar a resposta no meio. Recomendado: 2048 ou mais.
+          </p>
+        </div>
+
+        <hr className="border-[#EBE2D5]/50" />
+
+        {/* Temperature */}
+        <div className="space-y-3">
+          <div className="flex justify-between items-center">
+            <label className="text-[11px] font-bold text-[#6B5A4B] uppercase tracking-wider block">
+              Temperatura (Criatividade da IA)
+            </label>
+            <span className="text-sm font-extrabold text-amber-700">{temperature.toFixed(1)}</span>
+          </div>
+          <input
+            type="range"
+            min="0"
+            max="2"
+            step="0.1"
+            value={temperature}
+            onChange={(e) => setTemperature(parseFloat(e.target.value))}
+            className="w-full accent-amber-700 bg-[#FAF7F2] h-2 rounded-lg cursor-pointer border border-[#EBE2D5]"
+          />
+          <p className="text-xs text-[#8C7A6B] leading-relaxed">
+            Controla a criatividade das respostas. Valores baixos (0.1–0.3) geram respostas mais precisas e previsíveis. Valores altos (0.8–1.5) tornam as respostas mais criativas e variadas. Recomendado para atendimento: 0.3 a 0.7.
           </p>
         </div>
 

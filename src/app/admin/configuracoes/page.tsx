@@ -29,6 +29,8 @@ export default async function SettingsPage() {
         systemPrompt: "Você é o atendente virtual da padaria. Seja educado, simpático e objetivo. Ajude os clientes a fazer pedidos do nosso cardápio. Quando o cliente pedir para adicionar mais um item no pedido, adicione o item, confirme o pedido completo com ele (listando todos os itens e o total) e atualize no sistema. Sempre confirme o pedido completo antes de finalizar.",
         debounceSeconds: 5,
         sessionTimeout: 1800,
+        messageContextLimit: 15,
+        maxOutputTokens: 4096,
         isActive: true,
       },
     });

@@ -28,9 +28,10 @@ interface Order {
   source: "WHATSAPP" | "WEB";
   total: number;
   deliveryAddress: {
-    street: string;
-    number: string;
-    neighborhood: string;
+    fullAddress?: string;
+    street?: string;
+    number?: string;
+    neighborhood?: string;
   } | null;
   notes: string | null;
   createdAt: string;
@@ -112,13 +113,15 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
   useEffect(() => {
     if (!socket) return;
 
-    socket.on("order", (data: { orderId: string; status: string; event: string }) => {
+    const handleOrder = (data: { orderId: string; status: string; event: string }) => {
       console.log(`[Kanban] Real-time order event received:`, data);
       fetchOrders();
-    });
+    };
+
+    socket.on("order", handleOrder);
 
     return () => {
-      socket.off("order");
+      socket.off("order", handleOrder);
     };
   }, [socket, fetchOrders]);
 
@@ -290,8 +293,8 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
                             <div>
                               <p className="font-bold text-[#2E251B]">Entrega em:</p>
                               <p className="text-[#6B5A4B] mt-0.5">
-                                {order.deliveryAddress.street}, {order.deliveryAddress.number} -{" "}
-                                {order.deliveryAddress.neighborhood}
+                                {order.deliveryAddress.fullAddress || 
+                                 `${order.deliveryAddress.street || ""}, ${order.deliveryAddress.number || ""} - ${order.deliveryAddress.neighborhood || ""}`}
                               </p>
                             </div>
                           </div>
@@ -314,13 +317,15 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
                               <span>{getNextButtonLabel(order.status)}</span>
                               <ArrowRight className="h-3 w-3" />
                             </button>
-                            <button
-                              onClick={() => setOrderToDelete(order.id)}
-                              className="bg-white hover:bg-rose-50 text-rose-600 border border-[#EBE2D5] hover:border-rose-200 px-3 py-2 rounded-lg transition-all cursor-pointer"
-                              title="Cancelar pedido"
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
+                            {col.key !== "DISPATCHED" && (
+                              <button
+                                onClick={() => setOrderToDelete(order.id)}
+                                className="bg-white hover:bg-rose-50 text-rose-600 border border-[#EBE2D5] hover:border-rose-200 px-3 py-2 rounded-lg transition-all cursor-pointer"
+                                title="Cancelar pedido"
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </button>
+                            )}
                           </div>
                         )}
 

@@ -28,9 +28,6 @@ const io = new Server(httpServer, {
 
 const redisSub = new Redis(redisUrl);
 
-// Debounce timers in memory: customerId -> Timeout
-const debounceTimers: Record<string, NodeJS.Timeout> = {};
-
 // Subscribe to all tenant-related channels
 redisSub.psubscribe("tenant:*:*").then(() => {
   console.log("🔊 WebSockets subscribed to Redis channels matching 'tenant:*:*'");
@@ -51,59 +48,6 @@ redisSub.on("pmessage", async (pattern, channel, message) => {
 
     // Broadcast the event to the Socket.io room
     io.to(`tenant:${tenantId}`).emit(eventType, data);
-
-    // Debounce/Orchestration logic for new user messages on WhatsApp
-    if (eventType === "message" && data.sender === "USER") {
-      const customerId = data.customerId;
-      
-      // If customer is being manually attended by human, ignore bot trigger
-      if (data.isHumanAttending) {
-        console.log(`[Debounce] Skipping customer ${customerId} (Human attending)`);
-        return;
-      }
-
-      // Fetch debounce time from BotSetting or fallback to 5 seconds
-      const botSetting = await prisma.botSetting.findUnique({
-        where: { tenantId },
-      });
-
-      if (!botSetting || !botSetting.isActive) {
-        console.log(`[Debounce] Skipping customer ${customerId} (Bot settings disabled/not found)`);
-        return;
-      }
-
-      const debounceMs = (botSetting.debounceSeconds || 5) * 1000;
-
-      // Clear existing timer if user sends another message
-      if (debounceTimers[customerId]) {
-        console.log(`[Debounce] Resetting timer for customer ${customerId}`);
-        clearTimeout(debounceTimers[customerId]);
-      }
-
-      console.log(`[Debounce] Scheduling bot response for customer ${customerId} in ${debounceMs}ms`);
-
-      // Set new timer
-      debounceTimers[customerId] = setTimeout(async () => {
-        delete debounceTimers[customerId];
-        console.log(`[Debounce] Timer expired. Triggering bot processing for customer ${customerId}`);
-
-        try {
-          const res = await fetch(`${nextAppUrl}/api/chat/process-bot`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ customerId }),
-          });
-
-          if (!res.ok) {
-            console.error(`❌ Bot processing failed: HTTP ${res.status}`);
-          } else {
-            console.log(`✅ Bot processed successfully for customer ${customerId}`);
-          }
-        } catch (fetchErr) {
-          console.error(`❌ Error calling bot API for customer ${customerId}:`, fetchErr);
-        }
-      }, debounceMs);
-    }
   } catch (error) {
     console.error("Error processing Redis message:", error);
   }

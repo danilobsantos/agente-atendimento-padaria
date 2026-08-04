@@ -1,87 +1,31 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { createLLMService } from "@/lib/adapters/factory";
 import { evolutionGo } from "@/lib/services/evolution-go";
-import type { LLMMessage } from "@/lib/types/llm";
-
-function cleanAndParseJSON(text: string) {
-  let cleaned = text.trim();
-  
-  // Remove markdown JSON code block formatting if present
-  if (cleaned.startsWith("```")) {
-    cleaned = cleaned.replace(/^```(json)?\n?/, "");
-  }
-  if (cleaned.endsWith("```")) {
-    cleaned = cleaned.replace(/```$/, "");
-  }
-  
-  cleaned = cleaned.trim();
-  return JSON.parse(cleaned);
-}
-
-function extractTextFromJSON(content: string): string {
-  try {
-    const parsed = cleanAndParseJSON(content);
-    return parsed.text || content;
-  } catch {
-    // Regex fallback if JSON is truncated, matching even without a closing quote
-    const match = content.match(/"text"\s*:\s*"((?:[^"\\]|\\.)*)/);
-    if (match && match[1]) {
-      return match[1].replace(/\\n/g, "\n").replace(/\\"/g, '"');
-    }
-    
-    // Ultimate fallback: strip common JSON tail artifacts if present
-    let fallback = content;
-    const actionIndex = fallback.indexOf('","action"');
-    if (actionIndex !== -1) {
-      fallback = fallback.substring(0, actionIndex);
-    }
-    // Remove leading {"text":" if present
-    fallback = fallback.replace(/^\{\s*"text"\s*:\s*"/, "");
-    return fallback;
-  }
-}
-
-function buildValidBotMessageJSON(content: string): string {
-  const text = extractTextFromJSON(content);
-  return JSON.stringify({
-    text: text,
-    action: {
-      type: "NONE",
-      items: [],
-      deliveryAddress: { street: "", number: "", neighborhood: "" },
-      notes: ""
-    }
-  });
-}
+import { SessionService } from "@/lib/services/session.service";
+import { MessageBuffer } from "@/lib/bot/message-buffer";
+import { IntentRouter } from "@/lib/bot/intent-router";
+import { LLMAgent } from "@/lib/bot/llm-agent";
+import { sendChunkedResponse } from "@/lib/bot/message-sender";
+import { OrdersService } from "@/lib/services/orders.service";
+import { ProductsService } from "@/lib/services/products.service";
+import { BotState } from "@/lib/types/session";
 
 export async function POST(request: Request) {
   try {
-    const { customerId } = await request.json();
+    const { customerId, message } = await request.json();
 
-    if (!customerId) {
-      return NextResponse.json({ error: "customerId is required" }, { status: 400 });
+    if (!customerId || !message) {
+      return NextResponse.json({ error: "customerId and message are required" }, { status: 400 });
     }
 
-    // 1. Fetch customer and bot settings
     const customer = await prisma.customer.findUnique({
       where: { id: customerId },
       include: {
-        tenant: {
-          include: {
-            botSetting: true,
-            products: {
-              where: { isAvailable: true },
-              include: { category: true },
-            },
-          },
-        },
+        tenant: { include: { botSetting: true } },
       },
     });
 
-    if (!customer) {
-      return NextResponse.json({ error: "Customer not found" }, { status: 404 });
-    }
+    if (!customer) return NextResponse.json({ error: "Customer not found" }, { status: 404 });
 
     const botSetting = customer.tenant.botSetting;
     if (!botSetting || !botSetting.isActive || customer.isHumanAttending) {
@@ -92,241 +36,161 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "LLM API Key is not configured" }, { status: 400 });
     }
 
-    // 2. Fetch active order (cart) if exists
-    let activeOrder = null;
-    if (customer.activeOrderId) {
-      activeOrder = await prisma.order.findUnique({
-        where: { id: customer.activeOrderId },
-        include: { items: { include: { product: true } } },
-      });
+    // 1. Debounce / Message Buffer
+    // This prevents multiple LLM calls if the user sends 3 fast messages. 
+    // It locks and queues them, then the single locked process consumes the queue.
+    const isFirst = await MessageBuffer.pushMessage(customer.tenantId, customerId, message);
+    if (!isFirst) {
+      return NextResponse.json({ status: "queued", reason: "debounce_active" });
     }
 
-    // 3. Fetch recent message history based on config
-    const contextLimit = botSetting?.messageContextLimit ?? 15;
-    const sessionTimeoutMs = (botSetting?.sessionTimeout ?? 1800) * 1000;
-    const sessionCutoff = new Date(Date.now() - sessionTimeoutMs);
+    // Wait a brief moment to allow rapid subsequent messages to queue up
+    await new Promise((resolve) => setTimeout(resolve, 2000));
 
-    const recentMessages = await prisma.chatMessage.findMany({
-      where: { 
-        customerId,
-        createdAt: { gte: sessionCutoff }
-      },
-      orderBy: { createdAt: "desc" },
-      take: contextLimit,
-    });
-    recentMessages.reverse();
-
-    // 4. Build Menu context
-    const menuContext = customer.tenant.products
-      .map((p) => {
-        const catName = p.category?.name || "Geral";
-        return `- [${catName}] ${p.name} | R$ ${p.price.toFixed(2)} | (ID: ${p.id}) | ${p.description || "Sem descrição"}`;
-      })
-      .join("\n");
-
-    // 5. Build Cart status context
-    let cartContext = "Carrinho atual está VAZIO.";
-    if (activeOrder && activeOrder.items.length > 0) {
-      const itemsList = activeOrder.items
-        .map((i) => `- ${i.product.name} (Qtd: ${i.quantity}) - R$ ${(i.price * i.quantity).toFixed(2)} (ID: ${i.product.id}) ${i.notes ? `[Obs: ${i.notes}]` : ""}`)
-        .join("\n");
-      cartContext = `
-Carrinho Atual (ID Pedido: ${activeOrder.id}):
-${itemsList}
-Total Parcial: R$ ${activeOrder.total.toFixed(2)}
-`;
+    // Consume all messages that arrived during the debounce window
+    const queuedMessages = await MessageBuffer.consumeMessages(customer.tenantId, customerId);
+    if (queuedMessages.length === 0) {
+      await MessageBuffer.releaseLock(customer.tenantId, customerId);
+      return NextResponse.json({ status: "empty_queue" });
     }
 
-    // 6. System Instruction prompting strict JSON output
-    const systemInstruction = `
-${botSetting.systemPrompt}
-
-CARDÁPIO DISPONÍVEL DA PADARIA:
-${menuContext}
-
-${cartContext}
-
-Você deve conversar normalmente com o cliente, respondendo em português.
-IMPORTANTE: Sempre que o cliente pedir para adicionar mais um item no pedido (ou alterar/remover itens), você deve OBRIGATORIAMENTE:
-1. Adicionar o item ao pedido usando a ação "ADD_ITEMS". O array "items" deve conter a lista COMPLETA de todos os itens do carrinho atualizados (itens anteriores + novo item).
-2. Confirmar o pedido completo com o cliente no campo "text" (ex: listando todos os itens atuais, suas quantidades e o total do pedido).
-3. Atualizar o pedido no sistema através da execução dessa ação JSON.
-
-No entanto, sua resposta deve ser OBRIGATORIAMENTE um objeto JSON válido seguindo a estrutura abaixo:
-{
-  "text": "Mensagem simpática que você vai enviar para o cliente respondendo à conversa ou resumindo o carrinho.",
-  "action": {
-    "type": "ADD_ITEMS" | "FINALIZE" | "NONE",
-    "items": [
-      {
-        "productId": "O ID (UUID real) do produto exatamente como listado no CARDÁPIO DISPONÍVEL (ex: 'e2c20d9b-...'). NUNCA invente ou use IDs fictícios como 'prod-1' ou nomes de itens.",
-        "quantity": 1,
-        "notes": "Qualquer observação (ex: bem passado, sem cebola)"
-      }
-    ],
-    "deliveryAddress": {
-      "street": "Nome da rua/avenida de entrega (string)",
-      "number": "Número da residência (string)",
-      "neighborhood": "Bairro de entrega (string)"
-    },
-    "notes": "Informações de pagamento como Dinheiro, Cartão, PIX, etc."
-  }
-}
-
-REGRAS DE AÇÃO:
-1. Se o cliente solicitar produtos ou quiser adicionar mais itens a um pedido existente, use a action type "ADD_ITEMS" fornecendo os UUIDs reais dos produtos corretos e as quantidades. O array "items" deve representar a lista COMPLETA de itens do carrinho final (anterior + novos).
-2. IMPORTANTE: Use SEMPRE o ID real (UUID completo) do produto que está listado no CARDÁPIO DISPONÍVEL. NUNCA invente ou use IDs fictícios como 'prod-1', 'pao-1' ou nomes de produtos no campo 'productId'.
-3. Se o cliente remover produtos ou quiser limpar o carrinho, trate isso na conversa e você pode atualizar o carrinho adicionando ou ajustando.
-4. Se o cliente fornecer o endereço e forma de pagamento, e desejar fechar/finalizar o pedido, use a action type "FINALIZE", preencha o objeto "deliveryAddress" com os campos "street", "number" e "neighborhood" e a forma de pagamento no campo "notes".
-5. Se for apenas conversa normal (saudação, dúvidas), use action type "NONE" e deixe os outros campos de action vazios ou vazios [].
-`;
-
-    const llmMessages: LLMMessage[] = [
-      { role: "system", content: systemInstruction },
-      ...recentMessages.map((msg) => ({
-        role: (msg.sender === "USER" ? "user" : "assistant") as "user" | "assistant",
-        content: msg.sender === "USER" ? msg.content : buildValidBotMessageJSON(msg.content),
-      })),
-    ];
-
-    // Trigger WhatsApp typing status
+    const fullMessage = queuedMessages.join("\\n");
     await evolutionGo.sendPresence(customer.phone, "composing").catch(() => {});
 
-    // 7. Request LLM completion
-    const llmService = createLLMService(botSetting.llmProvider);
-    const llmResponse = await llmService.generate(llmMessages, {
-      apiKey: botSetting.llmApiKey,
-      model: botSetting.llmModel,
-    });
+    // 2. Load Session from Redis (TTL from admin panel)
+    SessionService.setTTL(botSetting.sessionTimeout ?? 1800);
+    const session = await SessionService.getSession(customer.tenantId, customerId, customer.phone, customer.activeOrderId || undefined);
 
-    // 8. Parse the JSON response
-    let textToSend = "";
-    try {
-      const parsed = cleanAndParseJSON(llmResponse.text);
-      textToSend = parsed.text || "";
+    // 3. Intent Router (Business Rules bypass)
+    const routerResponse = await IntentRouter.route(fullMessage, session);
+    
+    let finalBotText = routerResponse.reply || "";
 
-      const action = parsed.action;
-      if (action && action.type !== "NONE") {
-        if (action.type === "ADD_ITEMS" && action.items?.length > 0) {
-          // Initialize order if not exists
-          let orderId = customer.activeOrderId;
-          if (!orderId) {
-            const newOrder = await prisma.order.create({
-              data: {
-                tenantId: customer.tenantId,
-                customerId: customer.id,
-                source: "WHATSAPP",
-                status: "PENDING",
-              },
-            });
-            orderId = newOrder.id;
-            await prisma.customer.update({
-              where: { id: customer.id },
-              data: { activeOrderId: orderId },
-            });
-          }
-
-          // Clear existing order items to replace/update cart
-          await prisma.orderItem.deleteMany({ where: { orderId: orderId! } });
-
-          // Add new items
-          let total = 0;
-          for (const item of action.items) {
-            const product = customer.tenant.products.find((p) => p.id === item.productId);
-            if (product) {
-              const qty = Math.max(1, parseInt(item.quantity) || 1);
-              await prisma.orderItem.create({
-                data: {
-                  orderId: orderId!,
-                  productId: product.id,
-                  quantity: qty,
-                  price: product.price,
-                  notes: item.notes || null,
-                },
-              });
-              total += product.price * qty;
-            }
-          }
-
-          // Update order total
-          const updatedOrder = await prisma.order.update({
-            where: { id: orderId! },
-            data: { total },
-          });
-
-          // Publish order update to Redis (for Kanban board update)
-          const { redisPub } = await import("@/lib/redis");
-          await redisPub.publish(
-            `tenant:${customer.tenantId}:order`,
-            JSON.stringify({ orderId, status: updatedOrder.status, event: "CART_UPDATED" })
-          );
-        } else if (action.type === "FINALIZE" && customer.activeOrderId) {
-          // Fetch the current order status
-          const existingOrder = await prisma.order.findUnique({
-            where: { id: customer.activeOrderId },
-            select: { status: true },
-          });
-
-          // Complete the order (only set status to CONFIRMED if it was PENDING)
-          const updatedOrder = await prisma.order.update({
-            where: { id: customer.activeOrderId },
-            data: {
-              ...(existingOrder?.status === "PENDING" && { status: "CONFIRMED" }),
-              deliveryAddress: action.deliveryAddress || {},
-              notes: action.notes || null,
-            },
-          });
-
-          const completedOrderId = customer.activeOrderId;
-
-          // Note: We keep activeOrderId set so that customers can still edit the order
-          // until it gets Dispatched, Delivered, or Cancelled by the merchant.
-
-          // Publish order creation to Redis (for Kanban board update)
-          const { redisPub } = await import("@/lib/redis");
-          await redisPub.publish(
-            `tenant:${customer.tenantId}:order`,
-            JSON.stringify({ orderId: completedOrderId, status: updatedOrder.status, event: "ORDER_CREATED" })
-          );
-        }
-      }
-    } catch (parseErr) {
-      console.warn("[Bot Process] Failed to parse LLM response as JSON. Falling back to clean text extraction.", parseErr);
-      textToSend = extractTextFromJSON(llmResponse.text); // Extract the dialogue text fallback
-    }
-
-    if (textToSend) {
-      // Save bot response in database
-      const botMessage = await prisma.chatMessage.create({
-        data: {
-          customerId: customer.id,
-          sender: "BOT",
-          content: textToSend,
-        },
+    if (!routerResponse.bypassed) {
+      // 4. Fallback to LLM if Intent Router didn't handle it
+      // First, get products for context if needed (we can provide UUIDs to the LLM via prompt if we wanted, but avoiding for token size)
+      // Actually, we'll append a slimmed product list to the user's prompt just in case, but cached.
+      const products = await ProductsService.getProducts(customer.tenantId);
+      
+      // Build a compact menu with short numeric IDs to save tokens
+      // Each UUID is 36 chars; a short ID is 1-3 chars — saving ~33 chars per product
+      const idMap = new Map<string, string>(); // shortId -> UUID
+      const menuLines = products.map((p, i) => {
+        const shortId = String(i + 1);
+        idMap.set(shortId, p.id);
+        return `${shortId}.${p.name} R$${p.price}`;
       });
+      
+      const contextualMessage = `MENU:\n${menuLines.join("\n")}\n\nUSER:${fullMessage}`;
 
-      // Notify WebSocket server
-      const { redisPub } = await import("@/lib/redis");
-      await redisPub.publish(
-        `tenant:${customer.tenantId}:message`,
-        JSON.stringify({
-          ...botMessage,
-          customerName: customer.name || customer.phone,
-          phone: customer.phone,
-          isHumanAttending: customer.isHumanAttending,
-        })
+      const agentResponse = await LLMAgent.processMessage(
+        session,
+        contextualMessage,
+        {
+          provider: botSetting.llmProvider,
+          apiKey: botSetting.llmApiKey,
+          model: botSetting.llmModel,
+          maxOutputTokens: botSetting.maxOutputTokens,
+          messageContextLimit: botSetting.messageContextLimit,
+          temperature: botSetting.temperature ?? 0.7,
+          systemPrompt: botSetting.systemPrompt || "Você é um assistente virtual.",
+        }
       );
 
-      // Send via WhatsApp
-      await evolutionGo.sendText({
-        number: customer.phone,
-        text: textToSend,
-      });
+      finalBotText = agentResponse.message;
+
+      // 1. Process customer info if present
+      if (agentResponse.customerInfo) {
+        const ignoreValues = ["not provided", "não informado", "não providenciado", "null", ""];
+        
+        const nameVal = agentResponse.customerInfo.name?.trim() || "";
+        if (nameVal && !ignoreValues.includes(nameVal.toLowerCase())) {
+          session.customer.name = nameVal;
+        }
+        
+        const addrVal = agentResponse.customerInfo.address?.trim() || "";
+        if (addrVal && !ignoreValues.includes(addrVal.toLowerCase())) {
+          session.customer.address = addrVal;
+        }
+        
+        const payVal = agentResponse.customerInfo.payment?.trim() || "";
+        if (payVal && !ignoreValues.includes(payVal.toLowerCase())) {
+          session.payment = payVal;
+        }
+      }
+
+      // 2. Map short IDs back to UUIDs before executing order logic (allowed for any intent)
+      if (agentResponse.products && agentResponse.products.length > 0) {
+        const mappedProducts = agentResponse.products.map(p => ({
+          ...p,
+          id: idMap.get(p.id) || p.id, // Resolve short ID to UUID, fallback to original
+        }));
+        const result = await OrdersService.updateOrderItems(session, mappedProducts);
+        // Only append item addition result if not confirming order, to avoid duplicate/messy output
+        if (agentResponse.intent !== "confirmar_pedido") {
+          finalBotText += `\n\n${result}`;
+        }
+      }
+
+      // 3. Handle specific intents
+      if (agentResponse.intent === "confirmar_pedido") {
+        try {
+          const orderId = await OrdersService.finalizeOrder(session);
+          session.state = BotState.START;
+          session.activeOrderId = orderId;
+          // We DO NOT clear the session here anymore. We keep it alive so the context window remains.
+          finalBotText += `\n\n*(Pedido #${orderId.substring(0, 6)} gerado com sucesso!)*`;
+        } catch (e: any) {
+          console.error("[Bot Process] Error finalizing order:", e);
+          finalBotText = `Ops! Não consegui finalizar o seu pedido: ${e.message}\nPor favor, informe os dados que faltam para que eu possa concluir.`;
+        }
+      } else if (agentResponse.intent === "cancelar_pedido") {
+        session.state = BotState.CANCELLED;
+        if (session.activeOrderId) {
+          const existingOrder = await prisma.order.findUnique({
+            where: { id: session.activeOrderId },
+            select: { status: true }
+          });
+          if (existingOrder && ["PENDING", "CONFIRMED", "PREPARING"].includes(existingOrder.status)) {
+            await prisma.order.update({
+              where: { id: session.activeOrderId },
+              data: { status: "CANCELLED" }
+            });
+            await prisma.customer.update({
+              where: { id: session.customerId },
+              data: { activeOrderId: null }
+            });
+            const { redisPub } = await import("@/lib/redis");
+            await redisPub.publish(
+              `tenant:${session.tenantId}:order`,
+              JSON.stringify({ orderId: session.activeOrderId, status: "CANCELLED", event: "ORDER_STATUS_UPDATED" })
+            );
+          }
+        }
+        await SessionService.clearSession(session.tenantId, session.customerId);
+      }
     }
+
+    // 5. Append interaction to context
+    await SessionService.appendContext(session, "user", fullMessage);
+    await SessionService.appendContext(session, "assistant", finalBotText);
+
+    // Release Lock
+    await MessageBuffer.releaseLock(customer.tenantId, customerId);
+
+    // 6. Send response (auto-splits long messages with typing delays)
+    await sendChunkedResponse({
+      phone: customer.phone,
+      customerId: customer.id,
+      tenantId: customer.tenantId,
+      customerName: customer.name || customer.phone,
+      isHumanAttending: customer.isHumanAttending,
+      text: finalBotText,
+    });
 
     await evolutionGo.sendPresence(customer.phone, "paused").catch(() => {});
 
-    return NextResponse.json({ status: "success", response: textToSend });
+    return NextResponse.json({ status: "success", response: finalBotText });
   } catch (error: any) {
     console.error("[Bot Process] Error:", error);
     try {
@@ -334,7 +198,8 @@ REGRAS DE AÇÃO:
       const path = require("path");
       fs.writeFileSync(
         path.join(process.cwd(), "bot-error.log"),
-        `${new Date().toISOString()}\nError: ${error?.message || error}\nStack: ${error?.stack || "no-stack"}\n`
+        `${new Date().toISOString()}\\nError: ${error?.message || error}\\nStack: ${error?.stack || "no-stack"}\\n`,
+        { flag: "a" }
       );
     } catch (fsErr) {
       console.error("Failed to write bot error log:", fsErr);

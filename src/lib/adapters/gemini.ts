@@ -9,16 +9,51 @@ export class GeminiAdapter implements LLMService {
     const systemInstruction = messages.find((m) => m.role === "system");
     const conversationMessages = messages.filter((m) => m.role !== "system");
 
-    const contents = conversationMessages.map((msg) => ({
-      role: msg.role === "assistant" ? "model" : "user",
-      parts: [{ text: msg.content }],
-    }));
+    const contents = conversationMessages.map((msg) => {
+      if (msg.role === "tool") {
+        return {
+          role: "function",
+          parts: [
+            {
+              functionResponse: {
+                name: msg.name,
+                response: { result: msg.content },
+              },
+            },
+          ],
+        };
+      }
+
+      if (msg.role === "assistant" && msg.tool_calls) {
+        return {
+          role: "model",
+          parts: msg.tool_calls.map((tc) => {
+            if (tc._raw) return tc._raw;
+            return {
+              functionCall: {
+                name: tc.name,
+                args: JSON.parse(tc.arguments || "{}"),
+              },
+            };
+          }),
+        };
+      }
+
+      return {
+        role: msg.role === "assistant" ? "model" : "user",
+        parts: [{ text: msg.content }],
+      };
+    });
+
+    const useJsonMode = !config.tools || config.tools.length === 0;
 
     const body: Record<string, unknown> = {
       contents,
       generationConfig: {
-        temperature: 0.7,
-        maxOutputTokens: 1024,
+        temperature: config.temperature ?? 0.7,
+        maxOutputTokens: config.maxOutputTokens || 4096,
+        ...(useJsonMode && { responseMimeType: "application/json" }),
+        ...(useJsonMode && config.responseSchema && { responseSchema: config.responseSchema }),
       },
       safetySettings: [
         {
@@ -39,6 +74,18 @@ export class GeminiAdapter implements LLMService {
         },
       ],
     };
+
+    if (config.tools && config.tools.length > 0) {
+      body.tools = [
+        {
+          functionDeclarations: config.tools.map((t) => ({
+            name: t.name,
+            description: t.description,
+            parameters: t.parameters,
+          })),
+        },
+      ];
+    }
 
     if (systemInstruction) {
       body.systemInstruction = {
@@ -61,8 +108,35 @@ export class GeminiAdapter implements LLMService {
     }
 
     const data = await response.json();
-    const text = data.candidates?.[0]?.content?.parts?.[0]?.text ?? "";
+    const candidate = data.candidates?.[0];
+    
+    // Check if response is a function call
+    let tool_calls = undefined;
+    const parts = candidate?.content?.parts || [];
+    
+    const functionCallParts = parts.filter((p: any) => p.functionCall);
+    if (functionCallParts.length > 0) {
+      tool_calls = functionCallParts.map((p: any) => ({
+        id: Math.random().toString(36).substring(7), // Gemini doesn't return tool call IDs
+        name: p.functionCall.name,
+        arguments: JSON.stringify(p.functionCall.args || {}),
+        _raw: p,
+      }));
+    }
 
-    return { text, raw: data };
+    const textPart = parts.find((p: any) => p.text);
+    const text = textPart?.text ?? "";
+    
+    const finishReason = candidate?.finishReason;
+
+    if (finishReason === "MAX_TOKENS") {
+      console.warn(
+        `[GeminiAdapter] Response was truncated (finishReason: MAX_TOKENS). Output length: ${text.length} chars. Consider increasing maxOutputTokens or reducing prompt size.`
+      );
+    }
+
+    return { text, tool_calls, raw: data };
   }
 }
+
+

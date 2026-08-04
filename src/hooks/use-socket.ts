@@ -18,20 +18,29 @@ export function useSocket(tenantId: string) {
       setSocket(socketInstance);
     }, 0);
 
-    socketInstance.on("connect", () => {
+    const handleConnect = () => {
       setIsConnected(true);
       console.log("🔌 Connected to WebSocket server");
       // Join the tenant's room
       socketInstance.emit("join", tenantId);
-    });
+    };
 
-    socketInstance.on("disconnect", () => {
+    const handleDisconnect = () => {
       setIsConnected(false);
       console.log("🔌 Disconnected from WebSocket server");
-    });
+    };
+
+    if (socketInstance.connected) {
+      handleConnect();
+    }
+
+    socketInstance.on("connect", handleConnect);
+    socketInstance.on("disconnect", handleDisconnect);
 
     return () => {
       clearTimeout(timer);
+      socketInstance.off("connect", handleConnect);
+      socketInstance.off("disconnect", handleDisconnect);
       socketInstance.disconnect();
     };
   }, [tenantId]);

@@ -15,14 +15,14 @@ export async function GET(request: Request) {
     );
   }
 
-  // If customerId is provided, return that customer's messages
+  // If customerId is provided, return that customer's messages (latest 'limit' messages in ascending order)
   if (customerId) {
     const messages = await prisma.chatMessage.findMany({
       where: { customerId },
-      orderBy: { createdAt: "asc" },
+      orderBy: { createdAt: "desc" },
       take: limit,
     });
-    return NextResponse.json(messages);
+    return NextResponse.json(messages.reverse());
   }
 
   // If only tenantId, return recent conversations (grouped by customer)
@@ -34,10 +34,9 @@ export async function GET(request: Request) {
         take: 1,
       },
     },
-    orderBy: { updatedAt: "desc" },
   });
 
-  // Filter to only customers who have messages and sort by last message
+  // Filter to only customers who have messages and sort by last message date descending
   const conversations = customers
     .filter((c) => c.chatMessages.length > 0)
     .map((c) => ({
@@ -46,7 +45,16 @@ export async function GET(request: Request) {
       phone: c.phone,
       isHumanAttending: c.isHumanAttending,
       lastMessage: c.chatMessages[0],
-    }));
+    }))
+    .sort((a, b) => {
+      const timeA = a.lastMessage?.createdAt
+        ? new Date(a.lastMessage.createdAt).getTime()
+        : 0;
+      const timeB = b.lastMessage?.createdAt
+        ? new Date(b.lastMessage.createdAt).getTime()
+        : 0;
+      return timeB - timeA;
+    });
 
   return NextResponse.json(conversations);
 }

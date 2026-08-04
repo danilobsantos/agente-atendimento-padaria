@@ -45,8 +45,9 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
     try {
       const res = await fetch(`/api/chat?tenantId=${tenantId}`);
       if (res.ok) {
-        const data = await res.json();
+        const data: Conversation[] = await res.json();
         setConversations(data);
+        setActiveCustomerId((prev) => prev || (data.length > 0 ? data[0].customerId : null));
       }
     } catch (err) {
       console.error("Error fetching conversations:", err);
@@ -91,13 +92,27 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
 
+  const activeCustomerIdRef = useRef<string | null>(activeCustomerId);
+  useEffect(() => {
+    activeCustomerIdRef.current = activeCustomerId;
+  }, [activeCustomerId]);
+
   // Handle WebSocket events
   useEffect(() => {
     if (!socket) return;
 
-    socket.on("message", (msg: Message & { customerId: string; customerName: string; phone: string; isHumanAttending: boolean }) => {
+    const handleMessage = (
+      msg: Message & {
+        customerId: string;
+        customerName?: string;
+        phone?: string;
+        isHumanAttending?: boolean;
+      }
+    ) => {
       if (!msg || !msg.customerId) return;
-      if (activeCustomerId === msg.customerId) {
+      console.log("💬 [LiveChat WebSocket] Message received:", msg);
+
+      if (activeCustomerIdRef.current === msg.customerId) {
         setMessages((prev) => {
           if (prev.some((m) => m && m.id === msg.id)) return prev;
           return [...prev, msg];
@@ -106,11 +121,17 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
 
       setConversations((prev) => {
         const index = prev.findIndex((c) => c.customerId === msg.customerId);
+        const existing = index !== -1 ? prev[index] : null;
+
         const updatedConv: Conversation = {
           customerId: msg.customerId,
-          customerName: msg.customerName,
-          phone: msg.phone,
-          isHumanAttending: msg.isHumanAttending,
+          customerName:
+            msg.customerName || existing?.customerName || msg.phone || "Cliente",
+          phone: msg.phone || existing?.phone || "",
+          isHumanAttending:
+            typeof msg.isHumanAttending === "boolean"
+              ? msg.isHumanAttending
+              : existing?.isHumanAttending ?? false,
           lastMessage: msg,
         };
 
@@ -121,9 +142,9 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
           return [updatedConv, ...prev];
         }
       });
-    });
+    };
 
-    socket.on("customer", (status: { customerId: string; isHumanAttending: boolean }) => {
+    const handleCustomer = (status: { customerId: string; isHumanAttending: boolean }) => {
       setConversations((prev) =>
         prev.map((c) =>
           c.customerId === status.customerId
@@ -131,13 +152,16 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
             : c
         )
       );
-    });
+    };
+
+    socket.on("message", handleMessage);
+    socket.on("customer", handleCustomer);
 
     return () => {
-      socket.off("message");
-      socket.off("customer");
+      socket.off("message", handleMessage);
+      socket.off("customer", handleCustomer);
     };
-  }, [socket, activeCustomerId]);
+  }, [socket]);
 
   // Toggle Handover
   const toggleHandover = async (customerId: string, currentStatus: boolean) => {

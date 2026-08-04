@@ -80,14 +80,14 @@ export default function AdminLayout({
 
     const handleNewOrder = async (data: { orderId: string; status: string; event: string }) => {
       console.log("[AdminLayout] Real-time order event received:", data);
-      
+
       // We only alert on ORDER_CREATED event
       if (data.event === "ORDER_CREATED") {
         try {
           const res = await fetch(`/api/orders/${data.orderId}`);
           if (res.ok) {
             const order = await res.json();
-            
+
             // Add visual toast
             setToasts((prev) => [
               ...prev,
@@ -153,7 +153,7 @@ export default function AdminLayout({
           <div className="bg-[#FAF7F2] p-1.5 rounded-lg border border-[#EBE2D5]">
             <Coffee className="h-5 w-5 text-amber-700 animate-pulse" />
           </div>
-          <span className="font-serif font-bold text-lg tracking-wide text-amber-950">PAINEL DO ZÉ</span>
+          <span className="font-serif font-bold text-lg tracking-wide text-amber-950">SABOR DE MINAS</span>
         </div>
 
         {/* Navigation */}
@@ -165,11 +165,10 @@ export default function AdminLayout({
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${
-                  isActive
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${isActive
                     ? "bg-amber-600/5 text-amber-800 border-l-2 border-amber-700 rounded-l-none"
                     : "text-[#6B5A4B] hover:text-[#2E251B] hover:bg-[#F5EFE6]/60"
-                }`}
+                  }`}
               >
                 <Icon className={`h-5 w-5 ${isActive ? "text-amber-700" : "text-[#8C7A6B]"}`} />
                 <span>{item.label}</span>

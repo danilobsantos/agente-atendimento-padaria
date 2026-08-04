@@ -38,6 +38,8 @@ export async function PUT(request: Request) {
       debounceSeconds,
       sessionTimeout,
       messageContextLimit,
+      maxOutputTokens,
+      temperature,
       isActive,
     } = body;
 
@@ -55,6 +57,8 @@ export async function PUT(request: Request) {
         ...(debounceSeconds !== undefined && { debounceSeconds }),
         ...(sessionTimeout !== undefined && { sessionTimeout: parseInt(sessionTimeout) }),
         ...(messageContextLimit !== undefined && { messageContextLimit: parseInt(messageContextLimit) }),
+        ...(maxOutputTokens !== undefined && { maxOutputTokens: parseInt(maxOutputTokens) }),
+        ...(temperature !== undefined && { temperature: parseFloat(temperature) }),
         ...(isActive !== undefined && { isActive }),
       },
       create: {
@@ -66,6 +70,8 @@ export async function PUT(request: Request) {
         debounceSeconds: debounceSeconds ?? 5,
         sessionTimeout: sessionTimeout ? parseInt(sessionTimeout) : 1800,
         messageContextLimit: messageContextLimit ? parseInt(messageContextLimit) : 15,
+        maxOutputTokens: maxOutputTokens ? parseInt(maxOutputTokens) : 4096,
+        temperature: temperature ? parseFloat(temperature) : 0.7,
         isActive: isActive ?? true,
       },
     });
