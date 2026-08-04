@@ -26,10 +26,14 @@ export async function POST(request: Request) {
     // Extract phone number (remove @s.whatsapp.net suffix)
     const phone = remoteJid.replace("@s.whatsapp.net", "").replace("@g.us", "");
 
-    // Extract text content (supports conversation and extendedTextMessage)
+    // Extract text content (supports conversation, extendedTextMessage, and button/list replies)
     const text =
       message.message?.conversation ||
       message.message?.extendedTextMessage?.text ||
+      message.message?.buttonsResponseMessage?.selectedDisplayText ||
+      message.message?.buttonsResponseMessage?.selectedButtonId ||
+      message.message?.templateButtonReplyMessage?.selectedId ||
+      message.message?.listResponseMessage?.title ||
       "";
 
     if (!text) {

@@ -64,6 +64,39 @@ export class EvolutionGoService {
       body: JSON.stringify({ number, presence }),
     });
   }
+
+  async sendButtons(params: {
+    number: string;
+    title?: string;
+    description: string;
+    footer?: string;
+    buttons: Array<{ id: string; displayText: string }>;
+  }): Promise<SendTextResponse> {
+    const url = `${this.baseUrl}/message/sendButtons/${this.instanceName}`;
+
+    const response = await fetch(url, {
+      method: "POST",
+      headers: this.getHeaders(),
+      body: JSON.stringify({
+        number: params.number,
+        title: params.title || "",
+        description: params.description,
+        footer: params.footer || "",
+        buttons: params.buttons.map((btn) => ({
+          type: "reply",
+          displayText: btn.displayText,
+          id: btn.id,
+        })),
+      }),
+    });
+
+    if (!response.ok) {
+      const error = await response.text();
+      throw new Error(`Evolution Go error (${response.status}): ${error}`);
+    }
+
+    return response.json();
+  }
 }
 
 export const evolutionGo = new EvolutionGoService();
