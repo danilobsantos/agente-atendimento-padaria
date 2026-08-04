@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { ShoppingBag, X } from "lucide-react";
+import { formatOrderNumber } from "@/lib/utils/format-order";
 
 interface OrderToastProps {
   orderId: string;
@@ -21,7 +22,7 @@ export default function OrderToast({
   onClick,
 }: OrderToastProps) {
   const [progress, setProgress] = useState(100);
-  const shortId = orderId.slice(-6).toUpperCase();
+  const shortId = formatOrderNumber(orderId);
 
   useEffect(() => {
     const startTime = Date.now();
@@ -56,7 +57,7 @@ export default function OrderToast({
         <div className="flex-1 min-w-0 pr-4 space-y-1">
           <div className="flex items-center gap-1.5">
             <span className="font-serif font-bold text-[10px] bg-amber-600/10 text-amber-800 px-2 py-0.5 rounded-md uppercase tracking-wider">
-              Novo Pedido #{shortId}
+              Novo Pedido {shortId}
             </span>
           </div>
           <p className="text-sm font-semibold text-[#2E251B] truncate">

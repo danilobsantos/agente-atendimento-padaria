@@ -74,7 +74,8 @@ export class IntentRouter {
             const orderId = await OrdersService.finalizeOrder(session);
             session.state = BotState.START;
             session.activeOrderId = orderId;
-            return { bypassed: true, reply: `Pedido confirmado com sucesso! Já começamos a prepará-lo. (Pedido #${orderId.substring(0, 6)})` };
+            const { formatOrderNumber } = await import("../utils/format-order");
+            return { bypassed: true, reply: `Pedido confirmado com sucesso! Já começamos a prepará-lo. (Pedido ${formatOrderNumber(orderId)})` };
           } catch (e: any) {
             console.error("[Intent Router] Error finalizing order:", e);
             return { bypassed: true, reply: `Erro ao finalizar: ${e.message}` };

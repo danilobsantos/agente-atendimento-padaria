@@ -138,8 +138,9 @@ export async function POST(request: Request) {
           const orderId = await OrdersService.finalizeOrder(session);
           session.state = BotState.START;
           session.activeOrderId = orderId;
+          const { formatOrderNumber } = await import("@/lib/utils/format-order");
           // We DO NOT clear the session here anymore. We keep it alive so the context window remains.
-          finalBotText += `\n\n*(Pedido #${orderId.substring(0, 6)} gerado com sucesso!)*`;
+          finalBotText += `\n\n*(Pedido ${formatOrderNumber(orderId)} gerado com sucesso!)*`;
         } catch (e: any) {
           console.error("[Bot Process] Error finalizing order:", e);
           finalBotText = `Ops! Não consegui finalizar o seu pedido: ${e.message}\nPor favor, informe os dados que faltam para que eu possa concluir.`;

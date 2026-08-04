@@ -3,7 +3,9 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useSocket } from "@/hooks/use-socket";
 import { useSearchParams } from "next/navigation";
-import { Coffee, MessageSquare, Globe, ArrowRight, CheckCircle2, User, MapPin, Trash2, AlertTriangle } from "lucide-react";
+import { Coffee, MessageSquare, Globe, ArrowRight, CheckCircle2, User, MapPin, Trash2, AlertTriangle, Printer } from "lucide-react";
+import { printReceipt80mm } from "@/lib/utils/print-receipt";
+import { formatOrderNumber } from "@/lib/utils/format-order";
 
 interface Product {
   name: string;
@@ -245,15 +247,20 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
                       >
                         {/* Card Header: Source, Total, Date */}
                         <div className="flex justify-between items-center border-b border-[#FAF7F2] pb-2">
-                          {order.source === "WHATSAPP" ? (
-                            <span className="flex items-center gap-1 text-[10px] bg-emerald-500/10 text-emerald-800 border border-emerald-500/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
-                              <MessageSquare className="h-3 w-3" /> WhatsApp
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono font-extrabold text-xs bg-amber-600/10 text-amber-900 border border-amber-600/20 px-2 py-0.5 rounded-md">
+                              {formatOrderNumber(order.id)}
                             </span>
-                          ) : (
-                            <span className="flex items-center gap-1 text-[10px] bg-sky-500/10 text-sky-800 border border-sky-500/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
-                              <Globe className="h-3 w-3" /> Cardápio
-                            </span>
-                          )}
+                            {order.source === "WHATSAPP" ? (
+                              <span className="flex items-center gap-1 text-[10px] bg-emerald-500/10 text-emerald-800 border border-emerald-500/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                                <MessageSquare className="h-3 w-3" /> WhatsApp
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 text-[10px] bg-sky-500/10 text-sky-800 border border-sky-500/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                                <Globe className="h-3 w-3" /> Cardápio
+                              </span>
+                            )}
+                          </div>
                           <span className="text-sm font-extrabold text-amber-700">
                             R$ {order.total.toFixed(2)}
                           </span>
@@ -308,8 +315,8 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
                         )}
 
                         {/* Action buttons */}
-                        {col.key !== "DELIVERED" && (
-                          <div className="flex gap-2">
+                        <div className="flex gap-2">
+                          {col.key !== "DELIVERED" ? (
                             <button
                               onClick={() => handleNextStatus(order.id, order.status)}
                               className="flex-1 bg-[#FAF7F2] hover:bg-[#F5EFE6] text-amber-800 border border-[#EBE2D5] font-bold py-2 rounded-lg text-xs flex items-center justify-center gap-2 transition-all cursor-pointer active:scale-98"
@@ -317,24 +324,31 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
                               <span>{getNextButtonLabel(order.status)}</span>
                               <ArrowRight className="h-3 w-3" />
                             </button>
-                            {col.key !== "DISPATCHED" && (
-                              <button
-                                onClick={() => setOrderToDelete(order.id)}
-                                className="bg-white hover:bg-rose-50 text-rose-600 border border-[#EBE2D5] hover:border-rose-200 px-3 py-2 rounded-lg transition-all cursor-pointer"
-                                title="Cancelar pedido"
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </button>
-                            )}
-                          </div>
-                        )}
+                          ) : (
+                            <div className="flex-1 text-[11px] font-bold text-emerald-600 flex items-center gap-1.5 justify-center py-2 bg-emerald-500/5 rounded-lg border border-emerald-500/10">
+                              <CheckCircle2 className="h-4 w-4 text-emerald-600" />
+                              <span>Pedido Concluído</span>
+                            </div>
+                          )}
 
-                        {col.key === "DELIVERED" && (
-                          <div className="text-[11px] font-bold text-emerald-600 flex items-center gap-1.5 justify-center py-1 bg-emerald-500/5 rounded-lg border border-emerald-500/10">
-                            <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                            <span>Pedido Concluído</span>
-                          </div>
-                        )}
+                          <button
+                            onClick={() => printReceipt80mm(order)}
+                            className="bg-white hover:bg-amber-50 text-amber-800 border border-[#EBE2D5] hover:border-amber-300 px-3 py-2 rounded-lg transition-all cursor-pointer shadow-sm"
+                            title="Imprimir cupom (80mm)"
+                          >
+                            <Printer className="h-4 w-4" />
+                          </button>
+
+                          {col.key !== "DELIVERED" && col.key !== "DISPATCHED" && (
+                            <button
+                              onClick={() => setOrderToDelete(order.id)}
+                              className="bg-white hover:bg-rose-50 text-rose-600 border border-[#EBE2D5] hover:border-rose-200 px-3 py-2 rounded-lg transition-all cursor-pointer"
+                              title="Cancelar pedido"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          )}
+                        </div>
                       </div>
                     );
                   })
