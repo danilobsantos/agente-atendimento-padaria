@@ -55,6 +55,28 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
   const [orders, setOrders] = useState<Order[]>([]);
   const [orderToDelete, setOrderToDelete] = useState<string | null>(null);
   const [activeHighlightId, setActiveHighlightId] = useState<string | null>(null);
+  const [autoPrintEnabled, setAutoPrintEnabled] = useState<boolean>(false);
+  const autoPrintRef = React.useRef(autoPrintEnabled);
+
+  useEffect(() => {
+    autoPrintRef.current = autoPrintEnabled;
+  }, [autoPrintEnabled]);
+
+  useEffect(() => {
+    const saved = localStorage.getItem("auto_print_orders_enabled");
+    if (saved !== null) {
+      const timer = setTimeout(() => {
+        setAutoPrintEnabled(saved === "true");
+      }, 0);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  const toggleAutoPrint = () => {
+    const newVal = !autoPrintEnabled;
+    setAutoPrintEnabled(newVal);
+    localStorage.setItem("auto_print_orders_enabled", String(newVal));
+  };
   const { socket } = useSocket(tenantId);
 
   // Manage highlight fade and URL cleanup
@@ -115,9 +137,22 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
   useEffect(() => {
     if (!socket) return;
 
-    const handleOrder = (data: { orderId: string; status: string; event: string }) => {
+    const handleOrder = async (data: { orderId: string; status: string; event: string }) => {
       console.log(`[Kanban] Real-time order event received:`, data);
       fetchOrders();
+
+      // Trigger automatic thermal receipt print if enabled and event is ORDER_CREATED
+      if (data.event === "ORDER_CREATED" && autoPrintRef.current) {
+        try {
+          const res = await fetch(`/api/orders/${data.orderId}`);
+          if (res.ok) {
+            const newOrder = await res.json();
+            printReceipt80mm(newOrder);
+          }
+        } catch (err) {
+          console.error("Error auto-printing thermal receipt:", err);
+        }
+      }
     };
 
     socket.on("order", handleOrder);
@@ -191,9 +226,26 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
             Painel Kanban integrado em tempo real. Veja e separe os pedidos recebidos.
           </p>
         </div>
-        <div className="flex items-center gap-2 text-xs bg-white border border-[#EBE2D5] px-3.5 py-2 rounded-full shadow-sm">
-          <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
-          <span className="text-[#2E251B] font-semibold">Real-time Ativo</span>
+        <div className="flex items-center gap-3">
+          {/* Auto-Print Toggle Button */}
+          <button
+            onClick={toggleAutoPrint}
+            className={`flex items-center gap-2 text-xs border px-3.5 py-2 rounded-full shadow-sm transition-all cursor-pointer ${
+              autoPrintEnabled
+                ? "bg-amber-600/10 border-amber-600/30 text-amber-900 font-bold"
+                : "bg-white border-[#EBE2D5] text-[#8C7A6B] hover:text-[#2E251B]"
+            }`}
+            title="Impressão automática de cupom (80mm) ao receber novo pedido"
+          >
+            <Printer className={`h-3.5 w-3.5 ${autoPrintEnabled ? "text-amber-700" : "text-[#8C7A6B]"}`} />
+            <span>Auto-Impressão: <strong>{autoPrintEnabled ? "Ativada" : "Desativada"}</strong></span>
+          </button>
+
+          {/* Real-time Status */}
+          <div className="flex items-center gap-2 text-xs bg-white border border-[#EBE2D5] px-3.5 py-2 rounded-full shadow-sm">
+            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
+            <span className="text-[#2E251B] font-semibold">Real-time Ativo</span>
+          </div>
         </div>
       </div>
 
