@@ -71,12 +71,44 @@ export async function POST(request: Request) {
 
     const productPriceMap = new Map(products.map((p: { id: string; price: number }) => [p.id, p.price]));
 
-    const orderItems = items.map((item: { productId: string; quantity: number; notes?: string }) => ({
-      productId: item.productId,
-      quantity: item.quantity,
-      price: productPriceMap.get(item.productId) ?? 0,
-      notes: item.notes,
-    }));
+    // Fetch additional item prices (authoritative for pricing)
+    const extraIds = [
+      ...new Set(
+        (items as { additionalItems?: { id: string }[] }[])
+          .flatMap((i) => i.additionalItems || [])
+          .map((e) => e.id)
+      ),
+    ];
+    const extraItems =
+      extraIds.length > 0
+        ? await prisma.additionalItem.findMany({ where: { id: { in: extraIds } } })
+        : [];
+    const extraMap = new Map(extraItems.map((e: { id: string; name: string; price: number }) => [e.id, e]));
+
+    const orderItems = items.map((item: {
+      productId: string;
+      quantity: number;
+      notes?: string;
+      additionalItems?: { id: string; name: string; price: number }[];
+    }) => {
+      const additionalItems = (item.additionalItems || []).map((a) => {
+        const db = extraMap.get(a.id);
+        return {
+          id: a.id,
+          name: db?.name ?? a.name,
+          price: db?.price ?? a.price,
+        };
+      });
+      const basePrice = productPriceMap.get(item.productId) ?? 0;
+      const extrasTotal = additionalItems.reduce((sum, a) => sum + a.price, 0);
+      return {
+        productId: item.productId,
+        quantity: item.quantity,
+        price: basePrice + extrasTotal,
+        notes: item.notes,
+        additionalItems,
+      };
+    });
 
     const total = orderItems.reduce(
       (sum: number, item: { price: number; quantity: number }) => sum + item.price * item.quantity,

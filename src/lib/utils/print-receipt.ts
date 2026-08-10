@@ -8,6 +8,11 @@ interface OrderItem {
     name: string;
   };
   notes: string | null;
+  additionalItems?: {
+    id: string;
+    name: string;
+    price: number;
+  }[];
 }
 
 interface Customer {
@@ -68,6 +73,11 @@ export function printReceipt80mm(order: PrintableOrder): void {
           <td style="font-weight: bold; vertical-align: top; width: 12%; text-align: left;">${item.quantity}x</td>
           <td style="vertical-align: top; width: 63%; text-align: left;">
             <div>${item.product.name}</div>
+            ${item.additionalItems && item.additionalItems.length > 0
+              ? item.additionalItems
+                  .map((a) => `<div style="font-size: 10px; color: #333;">+ ${a.name} (+R$ ${a.price.toFixed(2).replace(".", ",")})</div>`)
+                  .join("")
+              : ""}
             ${item.notes ? `<div style="font-size: 11px; font-style: italic; color: #333;">Obs: ${item.notes}</div>` : ""}
             <div style="font-size: 10px; color: #555;">(R$ ${unitPrice} un)</div>
           </td>

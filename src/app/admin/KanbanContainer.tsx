@@ -17,6 +17,11 @@ interface OrderItem {
   quantity: number;
   product: Product;
   notes: string | null;
+  additionalItems?: {
+    id: string;
+    name: string;
+    price: number;
+  }[];
 }
 
 interface Customer {
@@ -343,6 +348,15 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
                               </span>
                             </div>
                           ))}
+                          {order.items
+                            .filter((i) => i.additionalItems && i.additionalItems.length > 0)
+                            .map((i) => (
+                              <div key={`extras-${i.id}`} className="flex justify-between gap-2">
+                                <span className="text-[11px] text-amber-800 line-clamp-1">
+                                  {(i.additionalItems || []).map((a) => `+ ${a.name}`).join(", ")}
+                                </span>
+                              </div>
+                            ))}
                         </div>
 
                         {/* Delivery address */}

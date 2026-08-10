@@ -17,6 +17,10 @@ export default async function CardapioPage() {
         include: { category: true },
         orderBy: { sortOrder: "asc" },
       },
+      additionalItems: {
+        where: { isAvailable: true },
+        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      },
     },
   });
 
@@ -34,6 +38,7 @@ export default async function CardapioPage() {
       tenantName={tenant.name}
       categories={tenant.categories}
       products={tenant.products}
+      additionalItems={tenant.additionalItems}
     />
   );
 }

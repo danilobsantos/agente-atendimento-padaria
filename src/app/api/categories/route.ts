@@ -16,3 +16,33 @@ export async function GET(request: Request) {
 
   return NextResponse.json(categories);
 }
+
+// POST /api/categories — Create a new category
+export async function POST(request: Request) {
+  try {
+    const body = await request.json();
+    const { tenantId, name, description, sortOrder, isActive } = body;
+
+    if (!tenantId || !name) {
+      return NextResponse.json(
+        { error: "tenantId and name are required" },
+        { status: 400 }
+      );
+    }
+
+    const category = await prisma.category.create({
+      data: {
+        tenantId,
+        name,
+        description,
+        sortOrder: sortOrder ?? 0,
+        isActive: isActive ?? true,
+      },
+    });
+
+    return NextResponse.json(category, { status: 201 });
+  } catch (error) {
+    console.error("[Categories] Error creating category:", error);
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
+  }
+}
