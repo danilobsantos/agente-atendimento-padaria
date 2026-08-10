@@ -18,10 +18,26 @@ interface Product {
   imageUrl: string | null;
 }
 
+interface AdditionalItem {
+  id: string;
+  categoryId: string | null;
+  name: string;
+  description: string | null;
+  price: number;
+}
+
+interface CartExtra {
+  id: string;
+  name: string;
+  price: number;
+}
+
 interface CartItem {
+  key: string;
   product: Product;
   quantity: number;
   notes: string;
+  extras: CartExtra[];
 }
 
 interface CardapioViewProps {
@@ -29,6 +45,7 @@ interface CardapioViewProps {
   tenantName: string;
   categories: Category[];
   products: Product[];
+  additionalItems: AdditionalItem[];
 }
 
 export default function CardapioView({
@@ -36,11 +53,31 @@ export default function CardapioView({
   tenantName,
   categories,
   products,
+  additionalItems,
 }: CardapioViewProps) {
   const [cart, setCart] = useState<CartItem[]>([]);
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+
+  // Extras selection modal
+  const [extraModalProduct, setExtraModalProduct] = useState<Product | null>(null);
+  const [selectedExtras, setSelectedExtras] = useState<CartExtra[]>([]);
+
+  const extrasByCategory = React.useMemo(() => {
+    const map = new Map<string | null, AdditionalItem[]>();
+    for (const item of additionalItems) {
+      const list = map.get(item.categoryId) || [];
+      list.push(item);
+      map.set(item.categoryId, list);
+    }
+    return map;
+  }, [additionalItems]);
+
+  const extrasForProduct = (product: Product) => [
+    ...(extrasByCategory.get(null) || []),
+    ...(product.categoryId ? extrasByCategory.get(product.categoryId) || [] : []),
+  ];
 
   // Form Fields
   const [name, setName] = useState("");
@@ -52,25 +89,42 @@ export default function CardapioView({
   const [specialNotes, setSpecialNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const cartTotal = cart.reduce((sum, item) => sum + item.product.price * item.quantity, 0);
+  const unitPrice = (item: CartItem) =>
+    item.product.price + item.extras.reduce((sum, e) => sum + e.price, 0);
 
-  const addToCart = (product: Product) => {
+  const cartTotal = cart.reduce(
+    (sum, item) => sum + unitPrice(item) * item.quantity,
+    0
+  );
+
+  const addToCart = (product: Product, extras: CartExtra[]) => {
+    const key = `${product.id}:${extras.map((e) => e.id).sort().join(",")}`;
     setCart((prev) => {
-      const existing = prev.find((item) => item.product.id === product.id);
+      const existing = prev.find((item) => item.key === key);
       if (existing) {
         return prev.map((item) =>
-          item.product.id === product.id ? { ...item, quantity: item.quantity + 1 } : item
+          item.key === key ? { ...item, quantity: item.quantity + 1 } : item
         );
       }
-      return [...prev, { product, quantity: 1, notes: "" }];
+      return [...prev, { key, product, quantity: 1, notes: "", extras }];
     });
   };
 
-  const updateQuantity = (productId: string, amount: number) => {
+  const handleAddClick = (product: Product) => {
+    const extras = extrasForProduct(product);
+    if (extras.length === 0) {
+      addToCart(product, []);
+      return;
+    }
+    setSelectedExtras([]);
+    setExtraModalProduct(product);
+  };
+
+  const updateQuantity = (key: string, amount: number) => {
     setCart((prev) =>
       prev
         .map((item) => {
-          if (item.product.id === productId) {
+          if (item.key === key) {
             const nextQty = item.quantity + amount;
             return { ...item, quantity: nextQty };
           }
@@ -80,11 +134,19 @@ export default function CardapioView({
     );
   };
 
-  const updateNotes = (productId: string, notes: string) => {
+  const updateNotes = (key: string, notes: string) => {
     setCart((prev) =>
       prev.map((item) =>
-        item.product.id === productId ? { ...item, notes } : item
+        item.key === key ? { ...item, notes } : item
       )
+    );
+  };
+
+  const toggleExtra = (extra: CartExtra) => {
+    setSelectedExtras((prev) =>
+      prev.some((e) => e.id === extra.id)
+        ? prev.filter((e) => e.id !== extra.id)
+        : [...prev, extra]
     );
   };
 
@@ -108,6 +170,11 @@ export default function CardapioView({
             productId: i.product.id,
             quantity: i.quantity,
             notes: i.notes,
+            additionalItems: i.extras.map((e) => ({
+              id: e.id,
+              name: e.name,
+              price: e.price,
+            })),
           })),
         }),
       });
@@ -187,7 +254,7 @@ export default function CardapioView({
                       </span>
                     </div>
                     <button
-                      onClick={() => addToCart(product)}
+                      onClick={() => handleAddClick(product)}
                       className="bg-amber-600 hover:bg-amber-700 text-white rounded-xl h-10 w-10 flex items-center justify-center transition-all shadow-sm shrink-0 active:scale-90 cursor-pointer"
                     >
                       <Plus className="h-5 w-5" />
@@ -233,26 +300,35 @@ export default function CardapioView({
             <div className="flex-1 overflow-y-auto p-6 space-y-4">
               {cart.map((item) => (
                 <div
-                  key={item.product.id}
+                  key={item.key}
                   className="bg-white border border-[#EBE2D5]/70 p-4 rounded-xl space-y-3 shadow-sm"
                 >
                   <div className="flex items-start justify-between gap-4">
                     <div className="flex-1">
                       <h5 className="font-serif font-bold text-sm text-[#2E251B]">{item.product.name}</h5>
                       <span className="text-xs text-amber-700 font-bold block mt-1">
-                        R$ {item.product.price.toFixed(2)}
+                        R$ {unitPrice(item).toFixed(2)}
                       </span>
+                      {item.extras.length > 0 && (
+                        <ul className="mt-1.5 space-y-0.5">
+                          {item.extras.map((e) => (
+                            <li key={e.id} className="text-[11px] text-[#6B5A4B]">
+                              + {e.name} <span className="font-semibold text-amber-700">(+R$ {e.price.toFixed(2)})</span>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
                     </div>
                     <div className="flex items-center gap-3 bg-[#FAF7F2] border border-[#EBE2D5]/80 rounded-lg px-2.5 py-1 shrink-0">
                       <button
-                        onClick={() => updateQuantity(item.product.id, -1)}
+                        onClick={() => updateQuantity(item.key, -1)}
                         className="text-[#6B5A4B] hover:text-[#2E251B] cursor-pointer"
                       >
                         <Minus className="h-4 w-4" />
                       </button>
                       <span className="text-sm font-extrabold text-[#2E251B]">{item.quantity}</span>
                       <button
-                        onClick={() => updateQuantity(item.product.id, 1)}
+                        onClick={() => updateQuantity(item.key, 1)}
                         className="text-[#6B5A4B] hover:text-[#2E251B] cursor-pointer"
                       >
                         <Plus className="h-4 w-4" />
@@ -263,7 +339,7 @@ export default function CardapioView({
                   <input
                     type="text"
                     value={item.notes}
-                    onChange={(e) => updateNotes(item.product.id, e.target.value)}
+                    onChange={(e) => updateNotes(item.key, e.target.value)}
                     placeholder="Adicionar observação (ex: sem cebola)"
                     className="w-full bg-[#FAF7F2] border border-[#EBE2D5]/80 rounded-lg px-3 py-1.5 text-xs text-[#2E251B] placeholder-slate-400 focus:outline-none focus:border-amber-600"
                   />
@@ -286,6 +362,81 @@ export default function CardapioView({
               >
                 <span>Continuar</span>
                 <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 4.5. Extras Selection Modal */}
+      {extraModalProduct && (
+        <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-40 flex items-end justify-center sm:items-center">
+          <div className="w-full max-w-md bg-[#FAF7F2] border-t sm:border border-[#EBE2D5] rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[85vh] flex flex-col">
+            <div className="p-6 border-b border-[#EBE2D5] flex justify-between items-center bg-white shadow-sm rounded-t-2xl shrink-0">
+              <div>
+                <h3 className="font-serif font-bold text-xl text-amber-950">{extraModalProduct.name}</h3>
+                <p className="text-xs text-[#6B5A4B] mt-0.5">
+                  R$ {extraModalProduct.price.toFixed(2)} — Escolha os opcionais
+                </p>
+              </div>
+              <button
+                onClick={() => setExtraModalProduct(null)}
+                className="p-1 rounded-full hover:bg-[#FAF7F2] text-[#6B5A4B] cursor-pointer"
+              >
+                <X className="h-6 w-6" />
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-6 space-y-3">
+              {extrasForProduct(extraModalProduct).map((extra) => {
+                const selected = selectedExtras.some((e) => e.id === extra.id);
+                return (
+                  <button
+                    key={extra.id}
+                    onClick={() => toggleExtra(extra)}
+                    className={`w-full flex items-center justify-between gap-4 p-4 rounded-xl border text-left transition-all cursor-pointer ${
+                      selected
+                        ? "bg-amber-700/10 border-amber-700 text-amber-950"
+                        : "bg-white border-[#EBE2D5]/70 hover:border-amber-900/20"
+                    }`}
+                  >
+                    <div className="space-y-0.5 flex-1">
+                      <span className={`font-semibold text-sm ${selected ? "text-amber-900" : "text-[#2E251B]"}`}>
+                        {extra.name}
+                      </span>
+                      {extra.description && (
+                        <p className="text-[11px] text-[#6B5A4B]">{extra.description}</p>
+                      )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      <span className="text-sm font-extrabold text-amber-700">+R$ {extra.price.toFixed(2)}</span>
+                      <span className={`h-5 w-5 rounded-md border flex items-center justify-center ${
+                        selected ? "bg-amber-700 border-amber-700 text-white" : "border-[#EBE2D5] text-transparent"
+                      }`}>
+                        <Check className="h-3.5 w-3.5" />
+                      </span>
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="p-6 border-t border-[#EBE2D5] bg-white space-y-3 shrink-0">
+              <div className="flex justify-between items-center text-[#6B5A4B] text-sm">
+                <span>{selectedExtras.length > 0 ? `${selectedExtras.length} opcional(is) selecionado(s)` : "Nenhum opcional"}</span>
+                <span className="font-semibold text-[#2E251B]">
+                  R$ {(extraModalProduct.price + selectedExtras.reduce((s, e) => s + e.price, 0)).toFixed(2)}
+                </span>
+              </div>
+              <button
+                onClick={() => {
+                  addToCart(extraModalProduct, selectedExtras);
+                  setExtraModalProduct(null);
+                }}
+                className="w-full bg-amber-700 hover:bg-amber-800 text-white font-semibold py-4 rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+              >
+                <span>Adicionar ao carrinho</span>
+                <ShoppingBag className="h-4 w-4" />
               </button>
             </div>
           </div>

@@ -7,7 +7,9 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "websocket": "tsx src/server/websocket.ts"
+    "websocket": "tsx src/server/websocket.ts",
+    "db:clean": "tsx prisma/clean.ts",
+    "db:import-cardapio": "tsx prisma/import-cardapio.ts"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.2",
