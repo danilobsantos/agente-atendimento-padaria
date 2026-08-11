@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Coffee, ShoppingBag, Plus, Minus, X, Check, ArrowRight, MapPin, User, Phone, CreditCard } from "lucide-react";
+import { Coffee, ShoppingBag, Plus, Minus, X, Check, ArrowRight, MapPin, User, Phone, CreditCard, Search } from "lucide-react";
 
 interface Category {
   id: string;
@@ -59,6 +59,7 @@ export default function CardapioView({
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
+  const [search, setSearch] = useState("");
 
   // Extras selection modal
   const [extraModalProduct, setExtraModalProduct] = useState<Product | null>(null);
@@ -78,6 +79,12 @@ export default function CardapioView({
     ...(extrasByCategory.get(null) || []),
     ...(product.categoryId ? extrasByCategory.get(product.categoryId) || [] : []),
   ];
+
+  const normalize = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+  const visibleProducts = search.trim()
+    ? products.filter((p) => normalize(p.name).includes(normalize(search)))
+    : products;
 
   // Form Fields
   const [name, setName] = useState("");
@@ -215,10 +222,37 @@ export default function CardapioView({
         </button>
       </header>
 
-      {/* 2. Menu Catalog Grid */}
+      {/* 2. Search */}
+      <div className="max-w-3xl mx-auto px-6 pt-6">
+        <div className="relative">
+          <Search className="h-4 w-4 text-[#6B5A4B] absolute left-4 top-1/2 -translate-y-1/2" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por produto..."
+            className="w-full bg-white border border-[#EBE2D5] text-[#2E251B] placeholder-slate-400 rounded-xl pl-11 pr-4 py-3 text-sm shadow-sm focus:outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-600"
+          />
+          {search && (
+            <button
+              onClick={() => setSearch("")}
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-[#FAF7F2] text-[#6B5A4B] cursor-pointer"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
+        {search.trim() && visibleProducts.length === 0 && (
+          <p className="text-center text-sm text-[#6B5A4B] mt-6">
+            Nenhum produto encontrado para "{search.trim()}"
+          </p>
+        )}
+      </div>
+
+      {/* 3. Menu Catalog Grid */}
       <div className="max-w-3xl mx-auto px-6 py-10 space-y-12">
         {categories.map((category) => {
-          const categoryProducts = products.filter((p) => p.categoryId === category.id);
+          const categoryProducts = visibleProducts.filter((p) => p.categoryId === category.id);
           if (categoryProducts.length === 0) return null;
 
           return (
@@ -267,7 +301,7 @@ export default function CardapioView({
         })}
       </div>
 
-      {/* 3. Floating Bottom Cart Button */}
+      {/* 4. Floating Bottom Cart Button */}
       {cart.length > 0 && (
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-white/80 backdrop-blur-md border-t border-[#EBE2D5] flex justify-center z-20">
           <button
