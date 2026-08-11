@@ -12,6 +12,7 @@ import {
   LogOut,
   Volume2,
   VolumeX,
+  User,
 } from "lucide-react";
 import { useSocket } from "@/hooks/use-socket";
 import OrderToast from "@/components/OrderToast";
@@ -142,6 +143,7 @@ export default function AdminLayout({
     { href: "/admin/chat", label: "Live Chat", icon: MessageSquare },
     { href: "/admin/cardapio", label: "Cardápio", icon: Utensils },
     { href: "/admin/configuracoes", label: "Configurações IA", icon: Settings },
+    { href: "/admin/perfil", label: "Meu Perfil", icon: User },
   ];
 
   return (
