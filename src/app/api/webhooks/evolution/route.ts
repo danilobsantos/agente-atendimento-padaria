@@ -6,8 +6,8 @@ export async function POST(request: Request) {
   try {
     const payload = await request.json();
 
-    // Only process incoming text messages
-    if (payload.event !== "messages.upsert") {
+    // Evolution Go envia event: "MESSAGE" (Node envia "messages.upsert"); o data é o mesmo objeto.
+    if (payload.event !== "messages.upsert" && payload.event !== "MESSAGE") {
       return NextResponse.json({ status: "ignored" });
     }
 

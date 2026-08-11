@@ -33,7 +33,7 @@ npm run websocket                     # socket.io na porta 3001 (painel em tempo
 
 > Se o Docker estiver parado, toda query Prisma falha com `PrismaClientKnownRequestError`. Suba os containers antes.
 
-`.env`: veja `.env.example`. `DATABASE_URL`, `EVOLUTION_API_URL/KEY/INSTANCE_NAME`, `NEXT_PUBLIC_APP_URL`. `REDIS_URL` e `JWT_SECRET` têm defaults no código (Redis local, secret fallback).
+`.env`: veja `.env.example`. `DATABASE_URL`, `EVOLUTION_API_URL/KEY/INSTANCE_NAME/INSTANCE_TOKEN`, `NEXT_PUBLIC_APP_URL`. `REDIS_URL` e `JWT_SECRET` têm defaults no código (Redis local, secret fallback). Na Evolution Go, o `EVOLUTION_INSTANCE_TOKEN` é o token da instância usado como `apikey` nas chamadas de envio/status/qr; a `EVOLUTION_API_KEY` é a chave global (criar/listar instâncias).
 
 ## Arquitetura do atendimento WhatsApp (fluxo)
 
@@ -44,7 +44,8 @@ npm run websocket                     # socket.io na porta 3001 (painel em tempo
 ## Banco (Prisma)
 
 - Modelos: `Tenant`, `BotSetting`, `Customer`, `ChatMessage`, `Category`, `Product`, `AdditionalItem`, `Order`, `OrderItem`, `User`.
-- Multi-tenant: tudo filho de `Tenant`. **Atenção**: alguns fluxos ainda assumem single-tenant e usam `tenant.findFirst({ where: { active: true } })` (ex.: webhook, página de configurações) — ao mexer nisso, considere resolver o tenant correto.
+- Multi-tenant: tudo filho de `Tenant`. **Atenção**: alguns fluxos ainda assumem single-tenant e usam `tenant.findFirst({ where: { active: true } })` (ex.: webhook, página de configurações) — ao mexer nisso, considere resolver o tenant correto. As rotas novas (`/api/company-settings`, `/api/evolution/*`) e a página `/admin/empresa` já resolvem o tenant via `getAuthUser()` (`src/lib/utils/auth-route.ts`, cookie JWT).
+- `Tenant` guarda dados da empresa: `cnpj`, `address`, `phone`, `logoUrl` (logo em `public/uploads/logo-{tenantId}.{ext}`).
 - `User.email` é único; `name` é nullable. Mudança de senha/hash → bcrypt (cost 10). JWT é re-assinado quando e-mail/nome mudam.
 - Migrações em `prisma/migrations`; scripts auxiliares: `db:clean` e `db:import-cardapio` (importa XLSX).
 
@@ -62,8 +63,8 @@ npm run websocket                     # socket.io na porta 3001 (painel em tempo
 
 - `npx tsc --noEmit` — typecheck (exigido sempre)
 - `npm run build` — build completo (exigido)
-- `npm run lint` — **tem ~27 erros pré-existentes** (no-explicit-any, no-require-imports, etc.) em arquivos antigos; corrija apenas o que os seus arquivos novos introduzem, não os legados
-- Não há suíte de testes no projeto
+- `npm test` — suíte de testes (runner nativo do Node via `tsx --test`, arquivos em `test/*.test.ts`); rode ao mexer nos serviços/validações cobertos
+- `npm run lint` — **tem ~27 erros pré-existentes** (no-explicit-any, no-require-imports, etc.) em arquivos antigos; corrija apenas o que os seus arquivos novos introduzem, não os legados"
 
 ## Docs adicionais
 
