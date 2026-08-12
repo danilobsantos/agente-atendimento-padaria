@@ -214,7 +214,7 @@ Atualiza as configurações do robô de IA.
     "tenantId": "cm7xyz123",
     "llmProvider": "DEEPSEEK",
     "llmApiKey": "sk-...",
-    "llmModel": "deepseek-chat",
+    "llmModel": "deepseek-v4-flash",
     "systemPrompt": "Você é um assistente virtual...",
     "sessionTimeout": 1800,
     "messageContextLimit": 15,
@@ -226,9 +226,74 @@ Atualiza as configurações do robô de IA.
 
 ---
 
+## 🏢 Dados da Empresa (`/api/company-settings`)
+
+Autenticadas pelo cookie de sessão (`auth_token`); o `tenantId` é resolvido no servidor, não precisa ser enviado.
+
+### 1. `GET /api/company-settings`
+Retorna os dados cadastrais da empresa do usuário autenticado.
+* **Resposta (200 OK)**:
+  ```json
+  {
+    "id": "cm7xyz123",
+    "name": "Padaria Sabor de Minas",
+    "cnpj": "11.222.333/0001-81",
+    "address": "Rua A, 123 - Centro, Belo Horizonte - MG",
+    "phone": "31999990000",
+    "logoUrl": "/uploads/logo-cm7xyz123.png"
+  }
+  ```
+
+### 2. `PUT /api/company-settings`
+Atualiza nome, CNPJ, endereço, telefone e (opcionalmente) faz upload da logo.
+* **Content-Type**: `multipart/form-data` (FormData)
+* **Campos**: `name` (obrigatório), `cnpj`, `address`, `phone`, `logo` (arquivo: JPG, PNG, WebP ou SVG).
+* **Comportamento**:
+  - Valida CNPJ (dígito verificador) e extensão da logo.
+  - Normaliza o telefone (apenas dígitos, mínimo 10).
+  - Salva a logo em `public/uploads/logo-{tenantId}.{ext}` e remove a anterior.
+* **Resposta (200 OK)**: mesmo formato do GET.
+
+---
+
+## 📱 Conexão WhatsApp — Evolution Go (`/api/evolution`)
+
+Usa as variáveis `EVOLUTION_API_URL`, `EVOLUTION_API_KEY` e `EVOLUTION_INSTANCE_NAME`. Resolve o `tenantId` pelo cookie de sessão.
+
+### 1. `GET /api/evolution/status`
+Consulta o estado da instância (`GET /instance/{name}/status` na Evolution Go).
+* **Resposta (200 OK)**:
+  ```json
+  { "connected": true, "loggedIn": false }
+  ```
+* **Resposta (502)**: Evolution Go fora do ar ou chave inválida — `{ "error": "...", "connected": false }`.
+
+### 2. `POST /api/evolution/connect`
+Garante que a instância existe (webhook apontando para `{APP_URL}/api/webhooks/evolution`) e retorna o QR code para pareamento.
+* **Resposta (200 OK)**:
+  ```json
+  {
+    "base64": "data:image/png;base64,iVBORw0KGgo...",
+    "code": "ABCD-WXYZ"
+  }
+  ```
+* **Resposta (502)**: `{ "error": "..." }` quando o QR não está disponível (Evolution Go parada ou instância sem webhook).
+
+---
+
 ## 📡 Webhooks (`/api/webhooks`)
 
 ### 1. `POST /api/webhooks/evolution`
-Recebe notificações HTTP em tempo real vindas da Evolution API / Evolution Go ao receber mensagens do WhatsApp.
-* **Eventos Processados**: `messages.upsert`
+Recebe notificações HTTP em tempo real vindas da Evolution Go ao receber mensagens do WhatsApp.
+* **Evento Processado**: `Message`
+* **Formato** (Evolution Go):
+  ```json
+  {
+    "event": "Message",
+    "data": {
+      "Info": { "Chat": "5511999999999@s.whatsapp.net", "PushName": "João", "IsFromMe": false, "IsGroup": false },
+      "Message": { "conversation": "Olá" }
+    }
+  }
+  ```
 * **Comportamento**: Salva mensagem no banco, transmite para o Livechat via WebSocket e aciona o pipeline do robô em `/api/chat/process-bot`.

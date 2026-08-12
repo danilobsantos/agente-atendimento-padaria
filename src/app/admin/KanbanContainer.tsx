@@ -3,9 +3,10 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useSocket } from "@/hooks/use-socket";
 import { useSearchParams } from "next/navigation";
-import { Coffee, MessageSquare, Globe, ArrowRight, CheckCircle2, User, MapPin, Trash2, AlertTriangle, Printer } from "lucide-react";
+import { Coffee, MessageSquare, Globe, ArrowRight, CheckCircle2, User, MapPin, Trash2, AlertTriangle, Printer, Bell, BellOff } from "lucide-react";
 import { printReceipt80mm } from "@/lib/utils/print-receipt";
 import { formatOrderNumber } from "@/lib/utils/format-order";
+import { useSound } from "./sound-context";
 
 interface Product {
   name: string;
@@ -62,6 +63,7 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
   const [activeHighlightId, setActiveHighlightId] = useState<string | null>(null);
   const [autoPrintEnabled, setAutoPrintEnabled] = useState<boolean>(false);
   const autoPrintRef = React.useRef(autoPrintEnabled);
+  const [whatsConnected, setWhatsConnected] = useState<boolean | null>(null);
 
   useEffect(() => {
     autoPrintRef.current = autoPrintEnabled;
@@ -83,6 +85,28 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
     localStorage.setItem("auto_print_orders_enabled", String(newVal));
   };
   const { socket } = useSocket(tenantId);
+  const { soundEnabled, toggleSound } = useSound();
+
+  const fetchWhatsStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/evolution/status");
+      if (res.ok) {
+        const data = await res.json();
+        setWhatsConnected(Boolean(data.connected));
+      }
+    } catch (err) {
+      console.error("Error fetching WhatsApp status:", err);
+    }
+  }, []);
+
+  useEffect(() => {
+    const init = setTimeout(fetchWhatsStatus, 0);
+    const timer = setInterval(fetchWhatsStatus, 15000);
+    return () => {
+      clearTimeout(init);
+      clearInterval(timer);
+    };
+  }, [fetchWhatsStatus]);
 
   // Manage highlight fade and URL cleanup
   useEffect(() => {
@@ -246,11 +270,49 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
             <span>Auto-Impressão: <strong>{autoPrintEnabled ? "Ativada" : "Desativada"}</strong></span>
           </button>
 
-          {/* Real-time Status */}
-          <div className="flex items-center gap-2 text-xs bg-white border border-[#EBE2D5] px-3.5 py-2 rounded-full shadow-sm">
-            <span className="h-2.5 w-2.5 rounded-full bg-emerald-500 animate-pulse" />
-            <span className="text-[#2E251B] font-semibold">Real-time Ativo</span>
-          </div>
+          {/* Notification Sound Toggle */}
+          <button
+            onClick={toggleSound}
+            title={soundEnabled ? "Som das notificações ativado" : "Som das notificações desativado"}
+            className="flex items-center gap-2 text-xs bg-white border border-[#EBE2D5] px-3.5 py-2 rounded-full shadow-sm cursor-pointer hover:border-amber-700/30 transition-colors"
+          >
+            {soundEnabled ? (
+              <Bell className="h-3.5 w-3.5 text-amber-700" />
+            ) : (
+              <BellOff className="h-3.5 w-3.5 text-[#8C7A6B]" />
+            )}
+            <span className="text-[#2E251B] font-semibold">Notificações</span>
+          </button>
+
+          {/* WhatsApp Connection Status */}
+          <a
+            href="/admin/empresa"
+            title="Status da conexão WhatsApp (Evolution Go). Clique para gerenciar."
+            className={`flex items-center gap-2 text-xs bg-white border px-3.5 py-2 rounded-full shadow-sm cursor-pointer hover:border-amber-700/30 transition-colors ${
+              whatsConnected === null
+                ? "border-[#EBE2D5]"
+                : whatsConnected
+                ? "border-emerald-300"
+                : "border-red-300"
+            }`}
+          >
+            <span
+              className={`h-2.5 w-2.5 rounded-full ${
+                whatsConnected === null
+                  ? "bg-amber-400 animate-pulse"
+                  : whatsConnected
+                  ? "bg-emerald-500"
+                  : "bg-red-500 animate-pulse"
+              }`}
+            />
+            <span className="text-[#2E251B] font-semibold">
+              {whatsConnected === null
+                ? "WhatsApp..."
+                : whatsConnected
+                ? "WhatsApp Conectado"
+                : "WhatsApp Desconectado"}
+            </span>
+          </a>
         </div>
       </div>
 

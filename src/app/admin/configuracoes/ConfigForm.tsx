@@ -36,7 +36,7 @@ export default function ConfigForm({ initialSettings }: { initialSettings: Setti
     const val = e.target.value as "DEEPSEEK" | "GEMINI";
     setProvider(val);
     if (val === "DEEPSEEK") {
-      setModel("deepseek-chat");
+      setModel("deepseek-v4-flash");
     } else if (val === "GEMINI") {
       setModel("gemini-2.0-flash");
     }
@@ -125,26 +125,32 @@ export default function ConfigForm({ initialSettings }: { initialSettings: Setti
             <label className="text-[11px] font-bold text-[#6B5A4B] uppercase tracking-wider block">
               Modelo
             </label>
-            <select
-              value={model}
-              onChange={(e) => setModel(e.target.value)}
-              className="w-full bg-[#FAF7F2] border border-[#EBE2D5] text-[#2E251B] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-600 cursor-pointer"
-            >
-              {provider === "DEEPSEEK" ? (
-                <>
-                  <option value="deepseek-chat">DeepSeek V3 (Rápido)</option>
-                  <option value="deepseek-reasoner">DeepSeek R1 (Raciocínio)</option>
-                </>
-              ) : (
-                <>
-                  <option value="gemini-3.5-flash">Gemini 3.5 Flash (Ultrarrápido)</option>
-                  <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Avançado)</option>
-                  <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                  <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-                  <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
-                </>
-              )}
-            </select>
+            {provider === "DEEPSEEK" ? (
+              <input
+                type="text"
+                list="deepseek-models"
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                placeholder="deepseek-v4-flash"
+                className="w-full bg-[#FAF7F2] border border-[#EBE2D5] text-[#2E251B] placeholder-[#A09384] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-600"
+              />
+            ) : (
+              <select
+                value={model}
+                onChange={(e) => setModel(e.target.value)}
+                className="w-full bg-[#FAF7F2] border border-[#EBE2D5] text-[#2E251B] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-600 cursor-pointer"
+              >
+                <option value="gemini-3.5-flash">Gemini 3.5 Flash (Ultrarrápido)</option>
+                <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Avançado)</option>
+                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
+                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
+                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
+              </select>
+            )}
+            <datalist id="deepseek-models">
+              <option value="deepseek-v4-flash">DeepSeek V4 Flash (Rápido)</option>
+              <option value="deepseek-reasoner">DeepSeek R1 (Raciocínio)</option>
+            </datalist>
           </div>
         </div>
 

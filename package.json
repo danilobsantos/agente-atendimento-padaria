@@ -8,6 +8,7 @@
     "start": "next start",
     "lint": "eslint",
     "websocket": "tsx src/server/websocket.ts",
+    "test": "tsx --test test/*.test.ts",
     "db:clean": "tsx prisma/clean.ts",
     "db:import-cardapio": "tsx prisma/import-cardapio.ts"
   },

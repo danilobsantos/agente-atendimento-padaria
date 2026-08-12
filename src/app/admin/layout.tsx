@@ -10,12 +10,12 @@ import {
   Settings,
   Coffee,
   LogOut,
-  Volume2,
-  VolumeX,
   User,
+  Building2,
 } from "lucide-react";
 import { useSocket } from "@/hooks/use-socket";
 import OrderToast from "@/components/OrderToast";
+import { SoundContext } from "./sound-context";
 
 interface ToastData {
   id: string;
@@ -143,6 +143,7 @@ export default function AdminLayout({
     { href: "/admin/chat", label: "Live Chat", icon: MessageSquare },
     { href: "/admin/cardapio", label: "Cardápio", icon: Utensils },
     { href: "/admin/configuracoes", label: "Configurações IA", icon: Settings },
+    { href: "/admin/empresa", label: "Empresa", icon: Building2 },
     { href: "/admin/perfil", label: "Meu Perfil", icon: User },
   ];
 
@@ -179,19 +180,6 @@ export default function AdminLayout({
           })}
         </nav>
 
-        {/* Mute/Unmute Toggle in Sidebar */}
-        <button
-          onClick={toggleSound}
-          className="flex items-center gap-3 px-4 py-3 mx-3 my-1 rounded-xl text-sm font-medium text-[#6B5A4B] hover:text-[#2E251B] hover:bg-[#F5EFE6]/60 transition-colors cursor-pointer text-left w-[calc(100%-24px)]"
-        >
-          {soundEnabled ? (
-            <Volume2 className="h-5 w-5 text-amber-700" />
-          ) : (
-            <VolumeX className="h-5 w-5 text-rose-600" />
-          )}
-          <span>Sons: {soundEnabled ? "Ativados" : "Mutados"}</span>
-        </button>
-
         {/* Logout */}
         <button
           onClick={handleLogout}
@@ -209,7 +197,9 @@ export default function AdminLayout({
 
       {/* Main Content Area */}
       <main className="flex-1 flex flex-col overflow-hidden bg-[#FAF7F2]">
-        {children}
+        <SoundContext.Provider value={{ soundEnabled, toggleSound }}>
+          {children}
+        </SoundContext.Provider>
       </main>
 
       {/* Floating Toast Containers (Top Right) */}

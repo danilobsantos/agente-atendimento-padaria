@@ -30,7 +30,7 @@ export class DeepSeekAdapter implements LLMService {
     });
 
     const body: any = {
-      model: config.model || "deepseek-chat",
+      model: config.model || "deepseek-v4-flash",
       messages: formattedMessages,
       temperature: config.temperature ?? 0.7,
       max_tokens: config.maxOutputTokens || 4096,

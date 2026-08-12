@@ -65,7 +65,7 @@ export async function PUT(request: Request) {
         tenantId,
         llmProvider: llmProvider ?? "DEEPSEEK",
         llmApiKey: llmApiKey ?? "",
-        llmModel: llmModel ?? "deepseek-chat",
+        llmModel: llmModel ?? "deepseek-v4-flash",
         systemPrompt: systemPrompt ?? "",
         debounceSeconds: debounceSeconds ?? 5,
         sessionTimeout: sessionTimeout ? parseInt(sessionTimeout) : 1800,
