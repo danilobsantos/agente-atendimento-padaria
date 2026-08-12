@@ -6,7 +6,7 @@ import { MessageBuffer } from "@/lib/bot/message-buffer";
 import { IntentRouter } from "@/lib/bot/intent-router";
 import { LLMAgent } from "@/lib/bot/llm-agent";
 import { sendChunkedResponse } from "@/lib/bot/message-sender";
-import { OrdersService } from "@/lib/services/orders.service";
+import { OrdersService, ORDER_LOCKED_REPLY } from "@/lib/services/orders.service";
 import { ProductsService } from "@/lib/services/products.service";
 import { BotState } from "@/lib/types/session";
 
@@ -119,6 +119,15 @@ export async function POST(request: Request) {
         }
       }
 
+      // A) Fallback de segurança: mesmo que a LLM classifique outra intenção que não
+      // "adicionar_itens", mensagens com intenção de adicionar itens já foram checadas
+      // de forma determinística pelo IntentRouter. Aqui recusamos apenas quando a LLM
+      // retorna a intenção explícita de adicionar itens (cobre frases que escaparam da regex).
+      if (agentResponse.intent === "adicionar_itens") {
+        const locked = await OrdersService.getOrderLockedReply(session);
+        if (locked) finalBotText = locked;
+      }
+
       // 2. Map short IDs back to UUIDs before executing order logic (allowed for any intent)
       if (agentResponse.products && agentResponse.products.length > 0) {
         const mappedProducts = agentResponse.products.map(p => ({
@@ -128,7 +137,11 @@ export async function POST(request: Request) {
         const result = await OrdersService.updateOrderItems(session, mappedProducts);
         // Only append item addition result if not confirming order, to avoid duplicate/messy output
         if (agentResponse.intent !== "confirmar_pedido") {
-          finalBotText += `\n\n${result}`;
+          // When the order is locked (ex: DISPATCHED), use the refusal as the whole reply
+          // so the LLM's "item adicionado" text is never sent alongside it.
+          finalBotText = result === ORDER_LOCKED_REPLY
+            ? result
+            : finalBotText + `\n\n${result}`;
         }
       }
 

@@ -4,18 +4,39 @@ import { ProductsService } from "./products.service";
 import { SessionService } from "./session.service";
 import { redisPub } from "@/lib/redis";
 
+export const ORDER_LOCKED_REPLY =
+  "Não é mais possivel, seu pedido já saiu para entrega. ";
+
 export class OrdersService {
+  static async getOrderLockedReply(session: BotSession): Promise<string | null> {
+    if (!session.activeOrderId) return null;
+
+    const activeOrder = await prisma.order.findUnique({
+      where: { id: session.activeOrderId },
+      select: { status: true },
+    });
+
+    return activeOrder && !["PENDING", "CONFIRMED", "PREPARING"].includes(activeOrder.status)
+      ? ORDER_LOCKED_REPLY
+      : null;
+  }
+
   static async updateOrderItems(session: BotSession, newItems: { id: string, quantity: number, notes?: string }[]): Promise<string> {
     if (newItems.length === 0) return "Nenhum item válido para adicionar.";
 
+    // Guard: check order status BEFORE touching the session, so a DISPATCHED/finished
+    // order is never mutated.
+    const locked = await OrdersService.getOrderLockedReply(session);
+    if (locked) return locked;
+
     let addedDescriptions: string[] = [];
-    
+
     for (const newItem of newItems) {
       const product = await ProductsService.getProductById(session.tenantId, newItem.id);
       if (!product) continue;
 
       const qty = Math.max(1, newItem.quantity || 1);
-      
+
       // Check if product is already in the order
       const existingItemIndex = session.order.items.findIndex(i => i.productId === product.id);
       if (existingItemIndex >= 0) {
@@ -40,40 +61,35 @@ export class OrdersService {
     this.recalculateTotal(session);
     await SessionService.saveSession(session);
 
-    if (session.activeOrderId && addedDescriptions.length > 0) {
-      const existingOrder = await prisma.order.findUnique({
+    if (session.activeOrderId) {
+      await prisma.order.update({
+        where: { id: session.activeOrderId },
+        data: {
+          total: session.order.total,
+          items: {
+            deleteMany: {},
+            create: session.order.items.map(item => ({
+              productId: item.productId,
+              quantity: item.quantity,
+              price: item.price,
+              notes: item.notes,
+            })),
+          },
+        },
+      });
+
+      // Notify Dashboard of the update
+      const activeOrder = await prisma.order.findUnique({
         where: { id: session.activeOrderId },
         select: { status: true },
       });
-
-      if (existingOrder && ["PENDING", "CONFIRMED", "PREPARING"].includes(existingOrder.status)) {
-        await prisma.order.update({
-          where: { id: session.activeOrderId },
-          data: {
-            total: session.order.total,
-            items: {
-              deleteMany: {},
-              create: session.order.items.map(item => ({
-                productId: item.productId,
-                quantity: item.quantity,
-                price: item.price,
-                notes: item.notes,
-              })),
-            },
-          },
-        });
-
-        // Notify Dashboard of the update
-        await redisPub.publish(
-          `tenant:${session.tenantId}:order`,
-          JSON.stringify({ orderId: session.activeOrderId, status: existingOrder.status, event: "ORDER_UPDATED" })
-        );
-      } else {
-        return "⚠️ Não é mais possível alterar este pedido pois ele já saiu para entrega ou foi finalizado. Por favor, inicie um novo pedido.";
-      }
+      await redisPub.publish(
+        `tenant:${session.tenantId}:order`,
+        JSON.stringify({ orderId: session.activeOrderId, status: activeOrder?.status, event: "ORDER_UPDATED" })
+      );
     }
 
-    return addedDescriptions.length > 0 
+    return addedDescriptions.length > 0
       ? `Itens adicionados: ${addedDescriptions.join(", ")}. Total atual: R$ ${session.order.total.toFixed(2)}.`
       : "Não foi possível encontrar os produtos solicitados.";
   }
@@ -81,7 +97,7 @@ export class OrdersService {
   static recalculateTotal(session: BotSession) {
     const itemsTotal = session.order.items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
     // Add delivery fee logic here if needed (e.g. static or calculated)
-    session.order.deliveryFee = 0; 
+    session.order.deliveryFee = 0;
     session.order.total = itemsTotal + session.order.deliveryFee;
   }
 
