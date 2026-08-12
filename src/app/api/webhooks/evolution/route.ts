@@ -6,19 +6,26 @@ export async function POST(request: Request) {
   try {
     const payload = await request.json();
 
-    // Evolution Go envia event: "MESSAGE" (Node envia "messages.upsert"); o data é o mesmo objeto.
-    if (payload.event !== "messages.upsert" && payload.event !== "MESSAGE") {
+    // Evolution Go event for received messages; keep the legacy names as a defensive fallback.
+    if (
+      payload.event !== "Message" &&
+      payload.event !== "messages.upsert" &&
+      payload.event !== "MESSAGE"
+    ) {
       return NextResponse.json({ status: "ignored" });
     }
 
-    const message = payload.data;
+    // Evolution Go wraps the message in data.Info (metadata) and data.Message (content).
+    const data = payload.data ?? {};
+    const info = data.Info ?? {};
+    const message = data.Message ?? data.message ?? {};
 
     // Ignore messages sent by us
-    if (message.key?.fromMe) {
+    if (info.IsFromMe ?? data.key?.fromMe) {
       return NextResponse.json({ status: "ignored" });
     }
 
-    const remoteJid = message.key?.remoteJid;
+    const remoteJid = info.Chat ?? data.key?.remoteJid;
     if (!remoteJid) {
       return NextResponse.json({ status: "no_jid" });
     }
@@ -28,12 +35,12 @@ export async function POST(request: Request) {
 
     // Extract text content (supports conversation, extendedTextMessage, and button/list replies)
     const text =
-      message.message?.conversation ||
-      message.message?.extendedTextMessage?.text ||
-      message.message?.buttonsResponseMessage?.selectedDisplayText ||
-      message.message?.buttonsResponseMessage?.selectedButtonId ||
-      message.message?.templateButtonReplyMessage?.selectedId ||
-      message.message?.listResponseMessage?.title ||
+      message.conversation ||
+      message.extendedTextMessage?.text ||
+      message.buttonsResponseMessage?.selectedDisplayText ||
+      message.buttonsResponseMessage?.selectedButtonId ||
+      message.templateButtonReplyMessage?.selectedId ||
+      message.listResponseMessage?.title ||
       "";
 
     if (!text) {
@@ -51,7 +58,7 @@ export async function POST(request: Request) {
     }
 
     // Extract customer pushName
-    const pushName = payload.data?.pushName || payload.pushName || null;
+    const pushName = info.PushName || payload.data?.pushName || payload.pushName || null;
 
     // Find or create customer
     const customer = await prisma.customer.upsert({

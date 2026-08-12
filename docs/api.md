@@ -284,6 +284,16 @@ Garante que a instância existe (webhook apontando para `{APP_URL}/api/webhooks/
 ## 📡 Webhooks (`/api/webhooks`)
 
 ### 1. `POST /api/webhooks/evolution`
-Recebe notificações HTTP em tempo real vindas da Evolution API / Evolution Go ao receber mensagens do WhatsApp.
-* **Eventos Processados**: `messages.upsert`
+Recebe notificações HTTP em tempo real vindas da Evolution Go ao receber mensagens do WhatsApp.
+* **Evento Processado**: `Message`
+* **Formato** (Evolution Go):
+  ```json
+  {
+    "event": "Message",
+    "data": {
+      "Info": { "Chat": "5511999999999@s.whatsapp.net", "PushName": "João", "IsFromMe": false, "IsGroup": false },
+      "Message": { "conversation": "Olá" }
+    }
+  }
+  ```
 * **Comportamento**: Salva mensagem no banco, transmite para o Livechat via WebSocket e aciona o pipeline do robô em `/api/chat/process-bot`.

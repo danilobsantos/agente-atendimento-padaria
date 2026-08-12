@@ -37,7 +37,7 @@ npm run websocket                     # socket.io na porta 3001 (painel em tempo
 
 ## Arquitetura do atendimento WhatsApp (fluxo)
 
-1. **Webhook** `POST /api/webhooks/evolution` ← Evolution API (`messages.upsert`). Salva a mensagem do cliente no banco, publica `tenant:{id}:message` no Redis (broadcast ao painel) e dispara `POST /api/chat/process-bot`.
+1. **Webhook** `POST /api/webhooks/evolution` ← Evolution Go (evento `Message`; campos `data.Info.Chat/PushName/IsFromMe` e `data.Message.conversation`). Salva a mensagem do cliente no banco, publica `tenant:{id}:message` no Redis (broadcast ao painel) e dispara `POST /api/chat/process-bot`.
 2. **process-bot** (`/api/chat/process-bot`): debounce via `MessageBuffer` (lock `setnx` de 3s no Redis) → carrega/reutiliza sessão em `SessionService` (Redis, TTL configurável) → `IntentRouter` resolve fluxos fixos (menu, endereço, pagamento, confirmar/cancelar) → se não resolveu, `LLMAgent` gera resposta em JSON estruturado (intento, customerInfo, products) → `OrdersService` monta/atualiza/finaliza pedido → `sendChunkedResponse` envia pelo WhatsApp (mensagens >800 chars quebradas em blocos com presence "composing").
 3. Pedidos persistem em `Order`/`OrderItem` no banco, publicam eventos `tenant:{id}:order` no Redis; o servidor socket.io escuta `tenant:*:*` e entrega na sala `tenant:{id}` do painel.
 

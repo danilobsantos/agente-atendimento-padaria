@@ -196,7 +196,7 @@ test("ensureInstance creates missing instance with name+token", async () => {
 
     const connect = calls[2];
     assert.equal(connect.url, "http://evo.local/instance/connect");
-    assert.equal(connect.headers.apikey, "instance-token");
+    assert.equal(connect.headers.apikey, "global-key");
     assert.equal(
       (connect.body as Record<string, unknown>).webhookUrl,
       "https://app.local/api/webhooks/evolution"

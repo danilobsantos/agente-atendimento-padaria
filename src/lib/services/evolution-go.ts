@@ -183,9 +183,11 @@ export class EvolutionGoService {
     }
 
     // Sincroniza o webhook sempre que a instância ainda não tiver a URL configurada.
+    // O /instance/connect usa a chave global no header (docs Evolution Go).
     if (webhookUrl && existing?.webhook !== webhookUrl) {
       await this.jsonFetch(`${this.baseUrl}/instance/connect`, {
         method: "POST",
+        headers: this.getHeaders("admin"),
         body: JSON.stringify({ webhookUrl, subscribe: ["MESSAGE", "CONNECTION", "QRCODE"] }),
       }).catch(() => {});
     }
