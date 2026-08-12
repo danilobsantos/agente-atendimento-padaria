@@ -19,6 +19,14 @@ export class IntentRouter {
       return { bypassed: true, reply: "Seu pedido foi cancelado com sucesso. Quando quiser fazer um novo pedido, é só mandar um Oi!" };
     }
 
+    // 2. Add-item requests: check order status BEFORE letting the LLM proceed.
+    // If the order is locked (DISPATCHED/finished), refuse deterministically.
+    const ADD_ITEM_PATTERN = /adicionar|acrescentar|adicionar mais|mais um item|colocar mais|modificar/;
+    if (ADD_ITEM_PATTERN.test(text) && session.activeOrderId) {
+      const locked = await OrdersService.getOrderLockedReply(session);
+      if (locked) return { bypassed: true, reply: locked };
+    }
+
     // 2. State-based fixed routing
     switch (session.state) {
       case BotState.START:
