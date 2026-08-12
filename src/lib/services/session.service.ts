@@ -65,6 +65,9 @@ export class SessionService {
         if (order.deliveryAddress) {
           const addr = order.deliveryAddress as any;
           newSession.customer.address = addr.fullAddress || "";
+        } else {
+          // Order without address = pickup (retirada)
+          newSession.orderType = "PICKUP";
         }
         if (order.notes) {
           newSession.payment = order.notes;

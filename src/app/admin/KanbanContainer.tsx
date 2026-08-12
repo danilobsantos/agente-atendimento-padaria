@@ -379,6 +379,15 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
                                 <Globe className="h-3 w-3" /> Cardápio
                               </span>
                             )}
+                            {order.deliveryAddress ? (
+                              <span className="flex items-center gap-1 text-[10px] bg-amber-600/10 text-amber-900 border border-amber-600/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                                <MapPin className="h-3 w-3" /> Entrega
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 text-[10px] bg-violet-500/10 text-violet-800 border border-violet-500/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                                <MapPin className="h-3 w-3" /> Retirada
+                              </span>
+                            )}
                           </div>
                           <span className="text-sm font-extrabold text-amber-700">
                             R$ {order.total.toFixed(2)}

@@ -121,7 +121,7 @@ export async function POST(request: Request) {
         customerId: finalCustomerId,
         source,
         total,
-        deliveryAddress: deliveryAddress || {},
+        deliveryAddress: deliveryAddress ?? null,
         notes,
         status: source === "WEB" ? "CONFIRMED" : "PENDING",
         items: {

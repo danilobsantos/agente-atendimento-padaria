@@ -61,6 +61,9 @@ export async function POST(request: Request) {
     SessionService.setTTL(botSetting.sessionTimeout ?? 1800);
     const session = await SessionService.getSession(customer.tenantId, customerId, customer.phone, customer.activeOrderId || undefined);
 
+    // Only classify delivery/pickup/order-type in the initial messages of the conversation
+    const isInitial = session.state === BotState.START || session.state === BotState.SHOW_MENU;
+
     // 3. Intent Router (Business Rules bypass)
     const routerResponse = await IntentRouter.route(fullMessage, session);
     
@@ -99,6 +102,32 @@ export async function POST(request: Request) {
 
       finalBotText = agentResponse.message;
 
+      // Order type: persist DELIVERY/PICKUP into the session
+      if (agentResponse.orderType === "PICKUP" || agentResponse.orderType === "DELIVERY") {
+        session.orderType = agentResponse.orderType;
+      }
+
+      // ENCOMENDA at conversation start → hand over to a human + notify panel
+      if (isInitial && agentResponse.orderType === "ENCOMENDA") {
+        finalBotText = "Perfeito! Encomendas personalizadas são atendidas por um atendente. Em instantes alguém vai te chamar por aqui para entender melhor o que você precisa. 😊";
+        await prisma.customer.update({
+          where: { id: customer.id },
+          data: { isHumanAttending: true },
+        });
+        const { redisPub } = await import("@/lib/redis");
+        await redisPub.publish(
+          `tenant:${customer.tenantId}:customer`,
+          JSON.stringify({ customerId: customer.id, isHumanAttending: true })
+        );
+        const note = "🛎️ Cliente solicitou ENCOMENDA. Atendimento humano necessário.";
+        const noteMessage = await prisma.chatMessage.create({
+          data: { customerId: customer.id, sender: "BOT", content: note },
+        });
+        await redisPub.publish(
+          `tenant:${customer.tenantId}:message`,
+          JSON.stringify({ ...noteMessage, customerName: customer.name || customer.phone, phone: customer.phone, isHumanAttending: true })
+        );
+      } else {
       // 1. Process customer info if present
       if (agentResponse.customerInfo) {
         const ignoreValues = ["not provided", "não informado", "não providenciado", "null", ""];
@@ -183,6 +212,7 @@ export async function POST(request: Request) {
         }
         await SessionService.clearSession(session.tenantId, session.customerId);
       }
+      } // else: normal bot flow (skip order processing for ENCOMENDA)
     }
 
     // 5. Append interaction to context

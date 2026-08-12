@@ -35,6 +35,7 @@ export interface BotSession {
     deliveryFee: number;
   };
   payment?: string;
+  orderType?: "DELIVERY" | "PICKUP";
   context: {
     role: "user" | "assistant";
     content: string;
