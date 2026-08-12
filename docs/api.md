@@ -214,7 +214,7 @@ Atualiza as configurações do robô de IA.
     "tenantId": "cm7xyz123",
     "llmProvider": "DEEPSEEK",
     "llmApiKey": "sk-...",
-    "llmModel": "deepseek-chat",
+    "llmModel": "deepseek-v4-flash",
     "systemPrompt": "Você é um assistente virtual...",
     "sessionTimeout": 1800,
     "messageContextLimit": 15,

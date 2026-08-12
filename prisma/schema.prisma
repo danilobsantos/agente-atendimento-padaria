@@ -46,7 +46,7 @@ model BotSetting {
 
   llmProvider         LLMProvider @default(DEEPSEEK) @map("llm_provider")
   llmApiKey           String      @default("") @map("llm_api_key")
-  llmModel            String      @default("deepseek-chat") @map("llm_model")
+  llmModel            String      @default("deepseek-v4-flash") @map("llm_model")
   systemPrompt        String      @default("") @map("system_prompt") @db.Text
   debounceSeconds     Int         @default(5) @map("debounce_seconds")
   sessionTimeout      Int         @default(1800) @map("session_timeout") // 30 min default

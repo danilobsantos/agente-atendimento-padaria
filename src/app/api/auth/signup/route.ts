@@ -61,7 +61,7 @@ export async function POST(request: Request) {
           tenantId: tenant.id,
           llmProvider: "DEEPSEEK",
           llmApiKey: "",
-          llmModel: "deepseek-chat",
+          llmModel: "deepseek-v4-flash",
           systemPrompt: `Você é o atendente virtual da ${tenant.name}. Seja educado, simpático e objetivo. Ajude os clientes a fazer pedidos do nosso cardápio. Quando o cliente pedir para adicionar mais um item no pedido, adicione o item, confirme o pedido completo com ele (listando todos os itens e o total) e atualize no sistema. Sempre confirme o pedido completo antes de finalizar.`,
           debounceSeconds: 5,
           isActive: true,

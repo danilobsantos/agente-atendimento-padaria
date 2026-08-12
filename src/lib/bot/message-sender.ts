@@ -108,6 +108,11 @@ export async function sendChunkedResponse(params: SendChunkedParams): Promise<vo
     );
 
     // Send via WhatsApp
-    await evolutionGo.sendText({ number: phone, text: chunk });
+    try {
+      await evolutionGo.sendText({ number: phone, text: chunk });
+    } catch (e: any) {
+      console.error(`[sendChunkedResponse] sendText FAILED for phone="${phone}" (len=${phone.length}):`, e?.message || e);
+      throw e;
+    }
   }
 }
