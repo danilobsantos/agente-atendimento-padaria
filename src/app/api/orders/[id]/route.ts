@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { sendChunkedResponse } from "@/lib/bot/message-sender";
+import { formatOrderNumber } from "@/lib/utils/format-order";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -123,6 +125,21 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       `tenant:${order.tenantId}:order`,
       JSON.stringify({ orderId: order.id, status: order.status, event: "ORDER_STATUS_UPDATED" })
     );
+
+    // Notify the customer in background so the kanban card moves instantly (no LLM involved)
+    if (body.status === "DISPATCHED") {
+      const dispatchText = `Seu pedido ${formatOrderNumber(order.id)} saiu para entrega.`;
+      void sendChunkedResponse({
+        phone: order.customer.phone,
+        customerId: order.customerId,
+        tenantId: order.tenantId,
+        customerName: order.customer.name ?? "",
+        isHumanAttending: order.customer.isHumanAttending,
+        text: dispatchText,
+      }).catch(e => {
+        console.error("Failed to notify customer about order dispatch:", e);
+      });
+    }
 
     return NextResponse.json(order);
   } catch (err: any) {
