@@ -61,31 +61,28 @@ export async function POST(request: Request) {
     SessionService.setTTL(botSetting.sessionTimeout ?? 1800);
     const session = await SessionService.getSession(customer.tenantId, customerId, customer.phone, customer.activeOrderId || undefined);
 
+    // Only classify delivery/pickup/order-type in the initial messages of the conversation
+    const isInitial = session.state === BotState.START || session.state === BotState.SHOW_MENU;
+
     // 3. Intent Router (Business Rules bypass)
     const routerResponse = await IntentRouter.route(fullMessage, session);
     
     let finalBotText = routerResponse.reply || "";
 
     if (!routerResponse.bypassed) {
-      // 4. Fallback to LLM if Intent Router didn't handle it
-      // First, get products for context if needed (we can provide UUIDs to the LLM via prompt if we wanted, but avoiding for token size)
-      // Actually, we'll append a slimmed product list to the user's prompt just in case, but cached.
+      // 4. Fallback to LLM if Intent Router didn't handle it.
+      // The LLM uses the "consultar_cardapio" tool to look up products/prices on demand
+      // (no full menu is injected into every call). We still build a full-catalog idMap
+      // (shortId -> UUID) as a fallback so any product the LLM references resolves.
       const products = await ProductsService.getProducts(customer.tenantId);
-      
-      // Build a compact menu with short numeric IDs to save tokens
-      // Each UUID is 36 chars; a short ID is 1-3 chars — saving ~33 chars per product
-      const idMap = new Map<string, string>(); // shortId -> UUID
-      const menuLines = products.map((p, i) => {
-        const shortId = String(i + 1);
-        idMap.set(shortId, p.id);
-        return `${shortId}.${p.name} R$${p.price}`;
-      });
-      
-      const contextualMessage = `MENU:\n${menuLines.join("\n")}\n\nUSER:${fullMessage}`;
+      const idMap = new Map<string, string>();
+      products.forEach((p, i) => idMap.set(String(i + 1), p.id));
 
-      const agentResponse = await LLMAgent.processMessage(
+      const menuUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+
+      const { response: agentResponse, idMap: agentIdMap } = await LLMAgent.processMessage(
         session,
-        contextualMessage,
+        fullMessage,
         {
           provider: botSetting.llmProvider,
           apiKey: botSetting.llmApiKey,
@@ -94,11 +91,41 @@ export async function POST(request: Request) {
           messageContextLimit: botSetting.messageContextLimit,
           temperature: botSetting.temperature ?? 0.7,
           systemPrompt: botSetting.systemPrompt || "Você é um assistente virtual.",
+          menuUrl,
         }
       );
 
+      // Merge the agent's tool-resolved IDs over the full-catalog fallback
+      for (const [shortId, uuid] of agentIdMap) idMap.set(shortId, uuid);
+
       finalBotText = agentResponse.message;
 
+      // Order type: persist DELIVERY/PICKUP into the session
+      if (agentResponse.orderType === "PICKUP" || agentResponse.orderType === "DELIVERY") {
+        session.orderType = agentResponse.orderType;
+      }
+
+      // ENCOMENDA at conversation start → hand over to a human + notify panel
+      if (isInitial && agentResponse.orderType === "ENCOMENDA") {
+        finalBotText = "Perfeito! Encomendas personalizadas são atendidas por um atendente. Em instantes alguém vai te chamar por aqui para entender melhor o que você precisa. 😊";
+        await prisma.customer.update({
+          where: { id: customer.id },
+          data: { isHumanAttending: true },
+        });
+        const { redisPub } = await import("@/lib/redis");
+        await redisPub.publish(
+          `tenant:${customer.tenantId}:customer`,
+          JSON.stringify({ customerId: customer.id, isHumanAttending: true })
+        );
+        const note = "🛎️ Cliente solicitou ENCOMENDA. Atendimento humano necessário.";
+        const noteMessage = await prisma.chatMessage.create({
+          data: { customerId: customer.id, sender: "BOT", content: note },
+        });
+        await redisPub.publish(
+          `tenant:${customer.tenantId}:message`,
+          JSON.stringify({ ...noteMessage, customerName: customer.name || customer.phone, phone: customer.phone, isHumanAttending: true })
+        );
+      } else {
       // 1. Process customer info if present
       if (agentResponse.customerInfo) {
         const ignoreValues = ["not provided", "não informado", "não providenciado", "null", ""];
@@ -183,6 +210,7 @@ export async function POST(request: Request) {
         }
         await SessionService.clearSession(session.tenantId, session.customerId);
       }
+      } // else: normal bot flow (skip order processing for ENCOMENDA)
     }
 
     // 5. Append interaction to context

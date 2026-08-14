@@ -6,7 +6,19 @@ export interface ProductSummary {
   name: string;
   price: number;
   category: string;
+  categoryId: string | null;
   description: string | null;
+}
+
+export interface SearchExtra {
+  id: string;
+  name: string;
+  price: number;
+}
+
+export interface SearchProduct extends ProductSummary {
+  shortId: string;
+  extras: SearchExtra[];
 }
 
 export class ProductsService {
@@ -34,6 +46,7 @@ export class ProductsService {
       name: p.name,
       price: p.price,
       category: p.category?.name || "Geral",
+      categoryId: p.categoryId,
       description: p.description,
     }));
 
@@ -51,5 +64,46 @@ export class ProductsService {
   static async getProductById(tenantId: string, productId: string): Promise<ProductSummary | null> {
     const products = await this.getProducts(tenantId);
     return products.find(p => p.id === productId) || null;
+  }
+
+  static async searchProducts(
+    tenantId: string,
+    opts: { busca?: string; categoria?: string },
+    limit = 25
+  ): Promise<SearchProduct[]> {
+    const products = await this.getProducts(tenantId);
+
+    const normalize = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+    const busca = (opts.busca || "").trim().toLowerCase();
+    const categoria = (opts.categoria || "").trim().toLowerCase();
+
+    const filtered = products.filter((p) => {
+      if (busca && !normalize(p.name).includes(normalize(busca))) return false;
+      if (categoria && !normalize(p.category).includes(normalize(categoria))) return false;
+      return true;
+    });
+
+    const extras = await prisma.additionalItem.findMany({
+      where: { tenantId, isAvailable: true },
+    });
+    const extrasByCategory = new Map<string | null, SearchExtra[]>();
+    for (const e of extras) {
+      const list = extrasByCategory.get(e.categoryId) || [];
+      list.push({ id: e.id, name: e.name, price: e.price });
+      extrasByCategory.set(e.categoryId, list);
+    }
+    const extrasFor = (categoryId: string | null): SearchExtra[] => [
+      ...(extrasByCategory.get(null) || []),
+      ...(categoryId ? extrasByCategory.get(categoryId) || [] : []),
+    ];
+
+    return filtered.slice(0, limit).map((p) => {
+      const shortId = String(products.findIndex((x) => x.id === p.id) + 1);
+      return {
+        ...p,
+        shortId,
+        extras: extrasFor(p.categoryId),
+      };
+    });
   }
 }

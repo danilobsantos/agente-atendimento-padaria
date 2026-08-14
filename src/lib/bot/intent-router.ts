@@ -1,6 +1,5 @@
 import { BotSession, BotState } from "../types/session";
 import { SessionService } from "../services/session.service";
-import { ProductsService } from "../services/products.service";
 import { OrdersService } from "../services/orders.service";
 
 export interface IntentRouterResponse {
@@ -33,13 +32,10 @@ export class IntentRouter {
         // Greetings
         if (text === "oi" || text === "ola" || text === "olá" || text === "bom dia" || text === "boa tarde" || text === "boa noite") {
           session.state = BotState.SHOW_MENU;
-          const products = await ProductsService.getProducts(session.tenantId);
-          const menuText = products.map(p => `- ${p.name}: R$ ${p.price.toFixed(2)}`).join("\n");
-          
           await SessionService.saveSession(session);
           return { 
             bypassed: true, 
-            reply: `Olá! Bem-vindo(a). Aqui está o nosso cardápio:\n\n${menuText}\n\nO que você gostaria de pedir hoje?` 
+            reply: "Olá! Bem-vindo(a) à Sabor de Minas! 😊 O que você gostaria de pedir hoje?" 
           };
         }
         break;

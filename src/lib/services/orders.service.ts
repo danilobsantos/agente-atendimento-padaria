@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { Prisma } from "@/generated/prisma/client";
 import { BotSession, OrderItemState } from "../types/session";
 import { ProductsService } from "./products.service";
 import { SessionService } from "./session.service";
@@ -106,7 +107,8 @@ export class OrdersService {
       throw new Error("O carrinho está vazio.");
     }
 
-    if (!session.customer.address) {
+    // Pickup orders don't need an address
+    if (session.orderType !== "PICKUP" && !session.customer.address) {
       throw new Error("Endereço é obrigatório.");
     }
 
@@ -119,9 +121,9 @@ export class OrdersService {
       await prisma.order.update({
         where: { id: session.activeOrderId },
         data: {
-          deliveryAddress: {
-            fullAddress: session.customer.address,
-          },
+          deliveryAddress: session.orderType === "PICKUP"
+            ? Prisma.DbNull
+            : { fullAddress: session.customer.address },
           notes: session.payment,
         },
       });
@@ -142,9 +144,9 @@ export class OrdersService {
         source: "WHATSAPP",
         status: "CONFIRMED",
         total: session.order.total,
-        deliveryAddress: {
-          fullAddress: session.customer.address,
-        },
+        deliveryAddress: session.orderType === "PICKUP"
+          ? Prisma.DbNull
+          : { fullAddress: session.customer.address },
         notes: session.payment, // Payment details
         items: {
           create: session.order.items.map(item => ({

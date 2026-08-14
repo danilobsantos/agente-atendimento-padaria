@@ -93,6 +93,7 @@ export default function CardapioView({
   const [number, setNumber] = useState("");
   const [neighborhood, setNeighborhood] = useState("");
   const [payment, setPayment] = useState("PIX");
+  const [orderType, setOrderType] = useState<"DELIVERY" | "PICKUP">("DELIVERY");
   const [specialNotes, setSpecialNotes] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -159,7 +160,7 @@ export default function CardapioView({
 
   const handleCheckoutSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name || !phone || !street || !number || !neighborhood) return;
+    if (!name || !phone || (orderType === "DELIVERY" && (!street || !number || !neighborhood))) return;
 
     setIsSubmitting(true);
     try {
@@ -171,7 +172,7 @@ export default function CardapioView({
           customerPhone: phone,
           customerName: name,
           source: "WEB",
-          deliveryAddress: { street, number, neighborhood },
+          deliveryAddress: orderType === "PICKUP" ? null : { street, number, neighborhood },
           notes: `Pagamento: ${payment}${specialNotes ? ` | Obs: ${specialNotes}` : ""}`,
           items: cart.map((i) => ({
             productId: i.product.id,
@@ -517,7 +518,39 @@ export default function CardapioView({
                 </div>
               </div>
 
-              {/* Delivery Address */}
+              {/* Order type: Delivery vs Pickup */}
+              <div className="space-y-4">
+                <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wider border-b border-[#EBE2D5]/60 pb-1 flex items-center gap-1.5">
+                  <MapPin className="h-4 w-4" /> Como você prefere receber?
+                </h4>
+                <div className="grid grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setOrderType("DELIVERY")}
+                    className={`py-3 px-3 border rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                      orderType === "DELIVERY"
+                        ? "bg-amber-700/10 text-amber-800 border-amber-700"
+                        : "border-[#EBE2D5] text-[#6B5A4B] hover:border-[#6B5A4B] bg-white shadow-sm"
+                    }`}
+                  >
+                    Entrega no endereço
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setOrderType("PICKUP")}
+                    className={`py-3 px-3 border rounded-xl text-xs font-extrabold transition-all cursor-pointer ${
+                      orderType === "PICKUP"
+                        ? "bg-amber-700/10 text-amber-800 border-amber-700"
+                        : "border-[#EBE2D5] text-[#6B5A4B] hover:border-[#6B5A4B] bg-white shadow-sm"
+                    }`}
+                  >
+                    Retirada no balcão
+                  </button>
+                </div>
+              </div>
+
+              {/* Delivery Address (hidden for pickup) */}
+              {orderType === "DELIVERY" && (
               <div className="space-y-4">
                 <h4 className="text-xs font-bold text-amber-900 uppercase tracking-wider border-b border-[#EBE2D5]/60 pb-1 flex items-center gap-1.5">
                   <MapPin className="h-4 w-4" /> Endereço de Entrega
@@ -549,6 +582,7 @@ export default function CardapioView({
                   className="w-full bg-white border border-[#EBE2D5] text-[#2E251B] placeholder-slate-400 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-600"
                 />
               </div>
+              )}
 
               {/* Payment Method */}
               <div className="space-y-4">

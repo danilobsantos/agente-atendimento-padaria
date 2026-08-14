@@ -29,10 +29,11 @@ async function main() {
     maxOutputTokens: 1024,
     messageContextLimit: 10,
     temperature: 0.7,
-    systemPrompt: "Você é um assistente virtual."
+    systemPrompt: "Você é um assistente virtual.",
+    menuUrl: "http://localhost:3000",
   };
 
-  const res = await LLMAgent.processMessage(session, message, config);
+  const { response: res } = await LLMAgent.processMessage(session, message, config);
   console.log("LLM Response Turn 1:", JSON.stringify(res, null, 2));
 
   // Simulating route.ts
@@ -45,7 +46,7 @@ async function main() {
   session.context.push({ role: "assistant", content: res.message });
 
   const message2 = "sim";
-  const res2 = await LLMAgent.processMessage(session, message2, config);
+  const { response: res2 } = await LLMAgent.processMessage(session, message2, config);
   console.log("LLM Response Turn 2:", JSON.stringify(res2, null, 2));
 
 }
