@@ -45,15 +45,15 @@ export class GeminiAdapter implements LLMService {
       };
     });
 
-    const useJsonMode = !config.tools || config.tools.length === 0;
-
     const body: Record<string, unknown> = {
       contents,
       generationConfig: {
         temperature: config.temperature ?? 0.7,
         maxOutputTokens: config.maxOutputTokens || 4096,
-        ...(useJsonMode && { responseMimeType: "application/json" }),
-        ...(useJsonMode && config.responseSchema && { responseSchema: config.responseSchema }),
+        // Force JSON + schema even when tools are present: Gemini supports this and
+        // it keeps the final answer schema-shaped (function calls still work).
+        responseMimeType: "application/json",
+        ...(config.responseSchema && { responseSchema: config.responseSchema }),
       },
       safetySettings: [
         {
