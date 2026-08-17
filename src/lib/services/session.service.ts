@@ -1,6 +1,7 @@
 import { redisPub as redis } from "@/lib/redis";
 import { BotSession, BotState } from "../types/session";
 import { prisma } from "@/lib/prisma";
+import { isOrderMutable } from "../utils/order-status";
 
 const DEFAULT_SESSION_TTL = 1800; // 30 minutes fallback
 
@@ -25,6 +26,11 @@ export class SessionService {
       if (activeOrderId && session.activeOrderId !== activeOrderId) {
         session.activeOrderId = activeOrderId;
         await this.saveSession(session);
+      }
+      // Release a stale active order (DISPATCHED/READY/DELIVERED/CANCELLED) so the
+      // customer can start a new order instead of being permanently blocked.
+      if (session.activeOrderId) {
+        await this.releaseStaleActiveOrder(session);
       }
       return session;
     }
@@ -52,7 +58,7 @@ export class SessionService {
         include: { items: { include: { product: true } } }
       });
 
-      if (order && (order.status === "PENDING" || order.status === "CONFIRMED" || order.status === "PREPARING")) {
+      if (order && isOrderMutable(order.status)) {
         newSession.order.total = order.total;
         newSession.order.items = order.items.map(i => ({
           productId: i.productId,
@@ -85,6 +91,19 @@ export class SessionService {
   static async saveSession(session: BotSession): Promise<void> {
     const key = this.getKey(session.tenantId, session.customerId);
     await redis.setex(key, this.sessionTTL, JSON.stringify(session));
+  }
+
+  static async releaseStaleActiveOrder(session: BotSession): Promise<void> {
+    if (!session.activeOrderId) return;
+    const order = await prisma.order.findUnique({
+      where: { id: session.activeOrderId },
+      select: { status: true },
+    });
+    if (!order || !isOrderMutable(order.status)) {
+      session.activeOrderId = undefined;
+      session.order = { items: [], total: 0, deliveryFee: 0 };
+      await this.saveSession(session);
+    }
   }
 
   static async clearSession(tenantId: string, customerId: string): Promise<void> {

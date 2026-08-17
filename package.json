@@ -9,6 +9,7 @@
     "lint": "eslint",
     "websocket": "tsx src/server/websocket.ts",
     "test": "tsx --test test/*.test.ts",
+    "test:e2e": "RUN_E2E=1 tsx --test test/bot-flow-e2e.test.ts",
     "db:clean": "tsx prisma/clean.ts",
     "db:import-cardapio": "tsx prisma/import-cardapio.ts"
   },

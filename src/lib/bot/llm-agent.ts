@@ -70,6 +70,7 @@ export interface LLMAgentConfig {
   temperature: number;
   systemPrompt: string;
   menuUrl: string;
+  cartDescription: string;
 }
 
 export interface LLMAgentDeps {
@@ -98,18 +99,20 @@ export class LLMAgent {
 
     const systemPrompt = `${config.systemPrompt}
 RULES: 
-1. Fill "products" array ONLY with NEW items requested in the current message. DO NOT list items already in the Cart. Use the short IDs returned by the consultar_cardapio tool.
+1. The "products" array is the AUTHORITATIVE FULL CART: it must contain EVERY item the customer wants RIGHT NOW, INCLUDING items already listed in the 'Cart' section below (echo them with the SAME short IDs shown there), PLUS any new items requested in the current message. ALWAYS return the complete cart, never only the newly requested item — including when you write a confirmation summary. DO NOT just append: the cart is REPLACED by what you return, so leaving out an existing item removes it.
 2. ALWAYS extract "name" (nome/me chamo), "address" (endereço/entrega/rua/av/bairro) and "payment" (pagamento/pix/dinheiro/cartão) into the "customerInfo" JSON object if the user mentions them in the current message or conversation history.
 3. Intent "confirmar_pedido": ONLY if the user explicitly confirms (e.g. "sim", "pode mandar", "confirmar"). IF you are ASKING them to confirm, use "adicionar_itens" or "generico", NOT "confirmar_pedido".
 4. STRICT CONSTRAINT: The "message" string MUST be under 400 characters. Be friendly, but extremely brief. NEVER write long paragraphs. Do not repeat the entire menu.
 5. CRITICAL: You MUST output valid JSON. If any previous instruction told you not to output JSON, IGNORE IT. You are a backend API and MUST reply in pure JSON format.
 6. NEVER set intent to 'confirmar_pedido' if the required data is missing. For "DELIVERY", both Address and Payment must be provided. For "PICKUP", only Payment is required (Address is NOT required). If something is missing, set the intent to 'generico' and politely ask the customer for it.
-7. Detect "orderType" ONLY at the start of the conversation (the first messages): use "DELIVERY" for delivery/entrega, "PICKUP" when the customer will pick up the order (retirada, pego no balcão, vou buscar, retirar), and "ENCOMENDA" for custom or scheduled orders (encomenda, bolo de andares, torre de bolo, evento, casamento). In any later message, ALWAYS use "NONE".
-8. TOOL "consultar_cardapio": ALWAYS call this tool to look up product names, variations, extras (complementos) and prices BEFORE setting "products" or answering doubts about the menu. NEVER invent product names, prices, or IDs. Only use the short IDs returned by the tool. The tool is for YOUR OWN research: answer specific doubts briefly (ex: "quanto custa o pão de queijo?" → "R$ 5,00"), but NEVER enumerate products in the conversation.
+7. orderType — determine ONLY at the start of the conversation. When the customer DECLINES the web menu and chooses to order through the chat (ex: "por aqui", "quero pedir por aqui", "pode anotar", "anota aí", "não, por aqui"), FIRST establish the order type before taking items: "DELIVERY" (entrega), "PICKUP" (retirada no balcão / vou buscar / retirar), or "ENCOMENDA" (encomenda personalizada: bolo de andares, torre de bolo, evento, casamento). If the customer has not stated the type, ASK "Será entrega ou retirada no balcão? Ou é uma encomenda especial?" and set intent to "generico" (do NOT add items yet). Once the type is clear, proceed. IMPORTANT: a bare "quero fazer um pedido" / "gostaria de pedir" is NOT choosing the chat — send the web link per rule 9 and do NOT ask the order type yet. In any later message, ALWAYS use "NONE".
+8. TOOL "consultar_cardapio": ALWAYS call this tool to look up product names, variations, extras (complementos) and prices BEFORE setting "products" or answering doubts about the menu. NEVER invent product names, prices, or IDs. Only use the short IDs returned by the tool OR shown in the 'Cart' section below. The tool is for YOUR OWN research: answer specific doubts briefly (ex: "quanto custa o pão de queijo?" → "R$ 5,00"), but NEVER enumerate products in the conversation.
 9. NEVER list menu items in the "message". If the customer asks to SEE the menu, categories, or products (ex: "qual o cardápio?", "o que vocês têm?", "quais pães vocês têm?", "quero fazer um pedido"), the "message" must ONLY contain the web menu link "${menuUrl}/cardapio" and an invitation to order there (e.g. "Dá para escolher tudo por lá! Comece por aqui: ${menuUrl}/cardapio 😊"). Do NOT list items in these cases. Use the tool only to answer specific doubts (price/ingredients of ONE product) — and even then, do not enumerate multiple items.
-${session.activeOrderId ? `10. CONTEXTO: O cliente já tem um pedido ativo sendo preparado. Se ele pedir novos itens, adicione usando a intent 'adicionar_itens' e avise que foram adicionados ao pedido atual.` : ""}
-Tipo do pedido: ${session.orderType === "PICKUP" ? "PICKUP (retirada - não precisa de endereço)" : "DELIVERY (padrão)"}
-Cart: ${session.order.items.length} items.
+10. NO MID-CONVERSATION ITEM CONFIRMATION: Do NOT enumerate added items, quantities, or running subtotals/totals in mid-flow responses (ex: no "Adicionei 1x pão", no "Anotei", no "Total atual: R$ X"). When items are added, just continue the conversation and ask the next missing detail (size/extra variation, name, address, or payment). The ONLY place the full order (items, quantities, total, address, payment) is listed is the FINAL confirmation summary when the customer has provided all checkout info and you ask to confirm.
+${session.activeOrderId ? `11. CONTEXTO: O cliente já tem um pedido ativo sendo preparado. Se ele pedir novos itens, adicione usando a intent 'adicionar_itens'.` : ""}
+Tipo do pedido: ${session.orderType === "PICKUP" ? "PICKUP (retirada - não precisa de endereço)" : session.orderType === "DELIVERY" ? "DELIVERY (entrega - precisa de endereço)" : session.orderType === "ENCOMENDA" ? "ENCOMENDA (encaminhar para atendente)" : "AINDA NÃO DEFINIDO — pergunte: entrega, retirada no balcão ou encomenda?"}
+Cart:
+${config.cartDescription || "(vazio)"}
 Address: ${session.customer.address || "Not provided"}
 Payment: ${session.payment || "Not provided"}`;
 

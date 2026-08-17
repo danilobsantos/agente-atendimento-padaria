@@ -6,11 +6,20 @@ import { MessageBuffer } from "@/lib/bot/message-buffer";
 import { IntentRouter } from "@/lib/bot/intent-router";
 import { LLMAgent } from "@/lib/bot/llm-agent";
 import { sendChunkedResponse } from "@/lib/bot/message-sender";
-import { OrdersService, ORDER_LOCKED_REPLY } from "@/lib/services/orders.service";
+import { OrdersService } from "@/lib/services/orders.service";
 import { ProductsService } from "@/lib/services/products.service";
 import { BotState } from "@/lib/types/session";
+import type { LLMService } from "@/lib/types/llm";
 
-export async function POST(request: Request) {
+export interface BotRouteDeps {
+  llmService?: LLMService;
+  send?: typeof sendChunkedResponse;
+  debounceMs?: number;
+  // Next.js typed-routes passes `context: { params }` here; only used for type-compat.
+  params?: unknown;
+}
+
+export async function POST(request: Request, deps: BotRouteDeps = {}) {
   try {
     const { customerId, message } = await request.json();
 
@@ -45,7 +54,7 @@ export async function POST(request: Request) {
     }
 
     // Wait a brief moment to allow rapid subsequent messages to queue up
-    await new Promise((resolve) => setTimeout(resolve, 2000));
+    await new Promise((resolve) => setTimeout(resolve, deps.debounceMs ?? 2000));
 
     // Consume all messages that arrived during the debounce window
     const queuedMessages = await MessageBuffer.consumeMessages(customer.tenantId, customerId);
@@ -80,6 +89,17 @@ export async function POST(request: Request) {
 
       const menuUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
+      // Build a short-id listing of the current cart so the LLM can echo the
+      // full cart back in "products" (same index+1 scheme as idMap above).
+      const uuidToShort = new Map<string, string>();
+      products.forEach((p, i) => uuidToShort.set(p.id, String(i + 1)));
+      const cartDescription = session.order.items
+        .map((it) => {
+          const short = uuidToShort.get(it.productId) ?? "?";
+          return `${short}. ${it.name} x${it.quantity}${it.notes ? ` (${it.notes})` : ""}`;
+        })
+        .join("\n");
+
       const { response: agentResponse, idMap: agentIdMap } = await LLMAgent.processMessage(
         session,
         fullMessage,
@@ -92,7 +112,9 @@ export async function POST(request: Request) {
           temperature: botSetting.temperature ?? 0.7,
           systemPrompt: botSetting.systemPrompt || "Você é um assistente virtual.",
           menuUrl,
-        }
+          cartDescription,
+        },
+        { llmService: deps.llmService }
       );
 
       // Merge the agent's tool-resolved IDs over the full-catalog fallback
@@ -117,13 +139,17 @@ export async function POST(request: Request) {
           `tenant:${customer.tenantId}:customer`,
           JSON.stringify({ customerId: customer.id, isHumanAttending: true })
         );
-        const note = "🛎️ Cliente solicitou ENCOMENDA. Atendimento humano necessário.";
-        const noteMessage = await prisma.chatMessage.create({
-          data: { customerId: customer.id, sender: "BOT", content: note },
-        });
+        // Reinforce the sidebar badge, then alert staff via a PANEL TOAST (a
+        // dedicated "notification" event), NOT a message in the customer chat.
         await redisPub.publish(
-          `tenant:${customer.tenantId}:message`,
-          JSON.stringify({ ...noteMessage, customerName: customer.name || customer.phone, phone: customer.phone, isHumanAttending: true })
+          `tenant:${customer.tenantId}:notification`,
+          JSON.stringify({
+            type: "encomenda",
+            customerId: customer.id,
+            customerName: customer.name || customer.phone,
+            phone: customer.phone,
+            message: "Solicitou encomenda — atendimento humano necessário.",
+          })
         );
       } else {
       // 1. Process customer info if present
@@ -146,30 +172,21 @@ export async function POST(request: Request) {
         }
       }
 
-      // A) Fallback de segurança: mesmo que a LLM classifique outra intenção que não
-      // "adicionar_itens", mensagens com intenção de adicionar itens já foram checadas
-      // de forma determinística pelo IntentRouter. Aqui recusamos apenas quando a LLM
-      // retorna a intenção explícita de adicionar itens (cobre frases que escaparam da regex).
-      if (agentResponse.intent === "adicionar_itens") {
-        const locked = await OrdersService.getOrderLockedReply(session);
-        if (locked) finalBotText = locked;
-      }
-
-      // 2. Map short IDs back to UUIDs before executing order logic (allowed for any intent)
-      if (agentResponse.products && agentResponse.products.length > 0) {
+      // 2. Map short IDs back to UUIDs before executing order logic.
+      // The cart is ONLY updated on addition/tweak cycles; on a pure confirm the
+      // LLM echo-returns the cart and re-applying it would double quantities.
+      if (agentResponse.products
+        && agentResponse.products.length > 0
+        && agentResponse.intent !== "confirmar_pedido") {
         const mappedProducts = agentResponse.products.map(p => ({
           ...p,
           id: idMap.get(p.id) || p.id, // Resolve short ID to UUID, fallback to original
         }));
-        const result = await OrdersService.updateOrderItems(session, mappedProducts);
-        // Only append item addition result if not confirming order, to avoid duplicate/messy output
-        if (agentResponse.intent !== "confirmar_pedido") {
-          // When the order is locked (ex: DISPATCHED), use the refusal as the whole reply
-          // so the LLM's "item adicionado" text is never sent alongside it.
-          finalBotText = result === ORDER_LOCKED_REPLY
-            ? result
-            : finalBotText + `\n\n${result}`;
-        }
+        // Items are added silently: confirmation appears only in the final order summary,
+        // never as a machine line after each addition. A stale active order
+        // (DISPATCHED/READY/DELIVERED/CANCELLED) is released internally, so items
+        // simply start a new cart instead of being refused.
+        await OrdersService.updateOrderItems(session, mappedProducts);
       }
 
       // 3. Handle specific intents
@@ -221,7 +238,7 @@ export async function POST(request: Request) {
     await MessageBuffer.releaseLock(customer.tenantId, customerId);
 
     // 6. Send response (auto-splits long messages with typing delays)
-    await sendChunkedResponse({
+    await (deps.send ?? sendChunkedResponse)({
       phone: customer.phone,
       customerId: customer.id,
       tenantId: customer.tenantId,
@@ -235,16 +252,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ status: "success", response: finalBotText });
   } catch (error: any) {
     console.error("[Bot Process] Error:", error);
-    try {
-      const fs = require("fs");
-      const path = require("path");
-      fs.writeFileSync(
-        path.join(process.cwd(), "bot-error.log"),
-        `${new Date().toISOString()}\\nError: ${error?.message || error}\\nStack: ${error?.stack || "no-stack"}\\n`,
-        { flag: "a" }
-      );
-    } catch (fsErr) {
-      console.error("Failed to write bot error log:", fsErr);
+    if (process.env.NODE_ENV !== "test") {
+      try {
+        const fs = require("fs");
+        const path = require("path");
+        fs.writeFileSync(
+          path.join(process.cwd(), "bot-error.log"),
+          `${new Date().toISOString()}\\nError: ${error?.message || error}\\nStack: ${error?.stack || "no-stack"}\\n`,
+          { flag: "a" }
+        );
+      } catch (fsErr) {
+        console.error("Failed to write bot error log:", fsErr);
+      }
     }
     return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }

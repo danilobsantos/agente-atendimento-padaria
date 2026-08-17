@@ -5,60 +5,40 @@ import { ProductsService } from "./products.service";
 import { SessionService } from "./session.service";
 import { redisPub } from "@/lib/redis";
 
-export const ORDER_LOCKED_REPLY =
-  "Não é mais possivel, seu pedido já saiu para entrega. ";
-
 export class OrdersService {
-  static async getOrderLockedReply(session: BotSession): Promise<string | null> {
-    if (!session.activeOrderId) return null;
-
-    const activeOrder = await prisma.order.findUnique({
-      where: { id: session.activeOrderId },
-      select: { status: true },
-    });
-
-    return activeOrder && !["PENDING", "CONFIRMED", "PREPARING"].includes(activeOrder.status)
-      ? ORDER_LOCKED_REPLY
-      : null;
-  }
-
   static async updateOrderItems(session: BotSession, newItems: { id: string, quantity: number, notes?: string }[]): Promise<string> {
     if (newItems.length === 0) return "Nenhum item válido para adicionar.";
 
-    // Guard: check order status BEFORE touching the session, so a DISPATCHED/finished
-    // order is never mutated.
-    const locked = await OrdersService.getOrderLockedReply(session);
-    if (locked) return locked;
+    // Release a stale active order (DISPATCHED/READY/DELIVERED/CANCELLED) so items
+    // land in a fresh cart instead of mutating a finished order.
+    await SessionService.releaseStaleActiveOrder(session);
 
-    let addedDescriptions: string[] = [];
+    // products = the AUTHORITATIVE full cart (per prompt rule 1); REPLACE, not accumulate.
+    const resolved: OrderItemState[] = [];
+    const addedDescriptions: string[] = [];
 
     for (const newItem of newItems) {
       const product = await ProductsService.getProductById(session.tenantId, newItem.id);
       if (!product) continue;
 
       const qty = Math.max(1, newItem.quantity || 1);
+      const existing = session.order.items.find(i => i.productId === product.id);
+      // ponytail: keep notes the LLM didn't re-send so chosen add-ons (e.g. "GRANDE") aren't dropped
+      const notes = newItem.notes ?? existing?.notes;
 
-      // Check if product is already in the order
-      const existingItemIndex = session.order.items.findIndex(i => i.productId === product.id);
-      if (existingItemIndex >= 0) {
-        // Update existing item
-        session.order.items[existingItemIndex].quantity += qty;
-        if (newItem.notes) {
-          session.order.items[existingItemIndex].notes = newItem.notes;
-        }
-      } else {
-        // Add new item
-        session.order.items.push({
-          productId: product.id,
-          name: product.name,
-          price: product.price,
-          quantity: qty,
-          notes: newItem.notes,
-        });
-      }
+      resolved.push({
+        productId: product.id,
+        name: product.name,
+        price: product.price,
+        quantity: qty,
+        notes,
+      });
       addedDescriptions.push(`${qty}x ${product.name}`);
     }
 
+    if (resolved.length === 0) return "Não foi possível encontrar os produtos solicitados.";
+
+    session.order.items = resolved;
     this.recalculateTotal(session);
     await SessionService.saveSession(session);
 
@@ -91,7 +71,7 @@ export class OrdersService {
     }
 
     return addedDescriptions.length > 0
-      ? `Itens adicionados: ${addedDescriptions.join(", ")}. Total atual: R$ ${session.order.total.toFixed(2)}.`
+      ? `Carrinho atual: ${addedDescriptions.join(", ")}. Total: R$ ${session.order.total.toFixed(2)}.`
       : "Não foi possível encontrar os produtos solicitados.";
   }
 

@@ -15,12 +15,19 @@ import {
 } from "lucide-react";
 import { useSocket } from "@/hooks/use-socket";
 import OrderToast from "@/components/OrderToast";
+import NotificationToast from "@/components/NotificationToast";
 import { SoundContext } from "./sound-context";
 
 interface ToastData {
   id: string;
   customerName: string;
   total: number;
+}
+
+interface EncomendaToastData {
+  id: string;
+  customerName: string;
+  message: string;
 }
 
 export default function AdminLayout({
@@ -33,6 +40,7 @@ export default function AdminLayout({
 
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [toasts, setToasts] = useState<ToastData[]>([]);
+  const [encomendaToasts, setEncomendaToasts] = useState<EncomendaToastData[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
 
   // Load sound preference
@@ -74,6 +82,15 @@ export default function AdminLayout({
     router.push(`/admin?highlight=${id}`);
     handleCloseToast(id);
   }, [router, handleCloseToast]);
+
+  const handleCloseEncomendaToast = useCallback((id: string) => {
+    setEncomendaToasts((prev) => prev.filter((t) => t.id !== id));
+  }, []);
+
+  const handleEncomendaToastClick = useCallback((id: string) => {
+    router.push("/admin/chat");
+    handleCloseEncomendaToast(id);
+  }, [router, handleCloseEncomendaToast]);
 
   // Real-time listener for order creation
   useEffect(() => {
@@ -117,6 +134,40 @@ export default function AdminLayout({
 
     return () => {
       socket.off("order", handleNewOrder);
+    };
+  }, [socket, soundEnabled]);
+
+  // Real-time listener for staff notifications (e.g. customer requested an ENCOMENDA)
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleNotification = (data: {
+      type: string;
+      customerId: string;
+      customerName: string;
+      message: string;
+    }) => {
+      if (data?.type !== "encomenda") return;
+      setEncomendaToasts((prev) => [
+        ...prev,
+        {
+          id: `${data.customerId}-${Date.now()}`,
+          customerName: data.customerName || "Cliente S/N",
+          message: data.message,
+        },
+      ]);
+      if (soundEnabled) {
+        const audio = new Audio("/notification.wav");
+        audio.play().catch((err) => {
+          console.warn("[AdminLayout] Audio autoplay blocked or failed:", err);
+        });
+      }
+    };
+
+    socket.on("notification", handleNotification);
+
+    return () => {
+      socket.off("notification", handleNotification);
     };
   }, [socket, soundEnabled]);
 
@@ -215,6 +266,19 @@ export default function AdminLayout({
               total={toast.total}
               onClose={() => handleCloseToast(toast.id)}
               onClick={() => handleToastClick(toast.id)}
+            />
+          </div>
+        ))}
+        {encomendaToasts.map((toast) => (
+          <div
+            key={toast.id}
+            className="pointer-events-auto animate-[slideIn_0.3s_cubic-bezier(0.16,1,0.3,1)]"
+          >
+            <NotificationToast
+              customerName={toast.customerName}
+              message={toast.message}
+              onClose={() => handleCloseEncomendaToast(toast.id)}
+              onClick={() => handleEncomendaToastClick(toast.id)}
             />
           </div>
         ))}

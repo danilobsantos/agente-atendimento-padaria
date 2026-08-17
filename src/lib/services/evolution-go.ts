@@ -104,8 +104,10 @@ export class EvolutionGoService {
   }
 
   private async jsonFetch<T>(url: string, init?: RequestInit): Promise<T> {
+    const signal = init?.signal ?? AbortSignal.timeout(8000);
     const response = await fetch(url, {
       ...init,
+      signal,
       headers: { ...this.getHeaders("instance"), ...(init?.headers ?? {}) },
     });
 

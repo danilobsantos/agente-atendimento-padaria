@@ -112,7 +112,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     });
 
     // Clear activeOrderId on customer if status transitions to completed/cancelled/dispatched
-    if (body.status === "DISPATCHED" || body.status === "DELIVERED" || body.status === "CANCELLED") {
+    if (body.status === "DISPATCHED" || body.status === "DELIVERED" || body.status === "CANCELLED" || body.status === "READY") {
       await prisma.customer.update({
         where: { id: order.customerId },
         data: { activeOrderId: null },

@@ -5,6 +5,7 @@ import type { BotSession, BotState } from "../src/lib/types/session";
 import type { LLMAgentConfig } from "../src/lib/bot/llm-agent";
 import type { SearchProduct } from "../src/lib/services/products.service";
 import type { LLMResponse } from "../src/lib/types/llm";
+import { isOrderMutable } from "../src/lib/utils/order-status";
 
 const PRODUCT: SearchProduct = {
   id: "prod-uuid-1",
@@ -38,6 +39,7 @@ const CONFIG: LLMAgentConfig = {
   temperature: 0.7,
   systemPrompt: "Você é um assistente virtual.",
   menuUrl: "https://app.local",
+  cartDescription: "(vazio)",
 };
 
 function finalResponse(message: string, overrides: Record<string, unknown> = {}) {
@@ -139,6 +141,7 @@ test("bounded tool loop: stops after MAX_TOOL_ROUNDS and falls back", async () =
 });
 
 test("preserves _raw (Gemini thoughtSignature) through the tool round-trip", async () => {
+  let assistantMsg: { tool_calls?: { _raw?: { thoughtSignature?: string } }[] } | undefined;
   const { idMap } = await runProcess((call, messages) => {
     if (call === 1) {
       return {
@@ -151,12 +154,20 @@ test("preserves _raw (Gemini thoughtSignature) through the tool round-trip", asy
         }],
       };
     }
+    assistantMsg = (messages as { role?: string; tool_calls?: unknown }[]).find(
+      (m) => m.role === "assistant" && m.tool_calls
+    ) as { tool_calls?: { _raw?: { thoughtSignature?: string } }[] } | undefined;
     return { text: finalResponse("Ok!") };
   });
-  const assistantMsg = (messagesArg.find(
-    (m) => m.role === "assistant" && m.tool_calls
-  ) as { tool_calls: { _raw?: { thoughtSignature?: string } }[] } | undefined) ?? { tool_calls: [] };
-  void assistantMsg;
   assert.equal(idMap.get("4"), "prod-uuid-1");
-  assert.equal(assistantMsg.tool_calls[0]?._raw?.thoughtSignature, "sig-123");
+  assert.equal(assistantMsg?.tool_calls?.[0]?._raw?.thoughtSignature, "sig-123");
+});
+
+test("isOrderMutable: only PENDING/CONFIRMED/PREPARING orders keep the active session", () => {
+  assert.equal(isOrderMutable("PENDING"), true);
+  assert.equal(isOrderMutable("CONFIRMED"), true);
+  assert.equal(isOrderMutable("DISPATCHED"), false);
+  assert.equal(isOrderMutable("READY"), false);
+  assert.equal(isOrderMutable("DELIVERED"), false);
+  assert.equal(isOrderMutable("CANCELLED"), false);
 });
