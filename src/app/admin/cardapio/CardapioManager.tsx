@@ -212,33 +212,32 @@ export default function CardapioManager({ tenantId }: { tenantId: string }) {
     p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
     (p.description && p.description.toLowerCase().includes(searchTerm.toLowerCase()))
   );
-
   return (
-    <div className="p-8 space-y-6 flex-1 overflow-y-auto bg-[#FAF7F2]">
+    <div className="p-3 sm:p-6 space-y-4 sm:space-y-6 flex-1 overflow-y-auto bg-[#FAF7F2]">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 shrink-0">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 shrink-0">
         <div>
-          <h1 className="text-3xl font-serif font-bold text-amber-950 flex items-center gap-2">
-            <Coffee className="text-amber-700 h-7 w-7" />
+          <h1 className="text-2xl sm:text-3xl font-serif font-bold text-amber-950 flex items-center gap-2">
+            <Coffee className="text-amber-700 h-6 w-6 sm:h-7 sm:w-7" />
             Gestão do Cardápio
           </h1>
-          <p className="text-xs text-[#6B5A4B] font-light mt-1">
-            Cadastre novos itens, edite preços ou habilite/desabilite produtos do cardápio digital em tempo real.
+          <p className="text-xs text-[#6B5A4B] font-light mt-0.5 sm:mt-1">
+            Cadastre novos itens, edite preços ou ative/desative produtos em tempo real.
           </p>
         </div>
         {tab === "produtos" && (
           <button
             onClick={handleOpenCreate}
-            className="bg-amber-700 hover:bg-amber-800 text-white font-bold px-4.5 py-3 rounded-xl flex items-center gap-2 transition-colors cursor-pointer shadow-sm text-sm active:scale-95"
+            className="w-full sm:w-auto bg-amber-700 hover:bg-amber-800 text-white font-bold px-4 py-2.5 sm:py-3 rounded-xl flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-sm text-sm active:scale-95 shrink-0"
           >
             <Plus className="h-4.5 w-4.5" />
-            Novo Produto
+            <span>Novo Produto</span>
           </button>
         )}
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1.5 bg-white border border-[#EBE2D5] rounded-xl p-1.5 w-fit shadow-sm">
+      <div className="flex gap-1.5 bg-white border border-[#EBE2D5] rounded-xl p-1.5 w-full sm:w-fit shadow-sm overflow-x-auto scrollbar-none">
         {TABS.map((t) => {
           const Icon = t.icon;
           const isActive = tab === t.id;
@@ -246,14 +245,14 @@ export default function CardapioManager({ tenantId }: { tenantId: string }) {
             <button
               key={t.id}
               onClick={() => setTab(t.id)}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-bold transition-all cursor-pointer ${
+              className={`flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2.5 rounded-lg text-xs sm:text-sm font-bold transition-all cursor-pointer shrink-0 ${
                 isActive
                   ? "bg-amber-700 text-white shadow-sm"
                   : "text-[#6B5A4B] hover:text-[#2E251B] hover:bg-[#FAF7F2]"
               }`}
             >
               <Icon className={`h-4 w-4 ${isActive ? "text-white" : "text-[#8C7A6B]"}`} />
-              {t.label}
+              <span>{t.label}</span>
             </button>
           );
         })}
@@ -265,14 +264,14 @@ export default function CardapioManager({ tenantId }: { tenantId: string }) {
       {tab === "produtos" && (
         <>
       {/* Filter and Search Bar */}
-      <div className="flex gap-4 max-w-md bg-white border border-[#EBE2D5] rounded-xl px-3.5 py-2.5 items-center shadow-sm">
+      <div className="flex gap-3 max-w-md bg-white border border-[#EBE2D5] rounded-xl px-3.5 py-2.5 items-center shadow-sm w-full">
         <Search className="h-4 w-4 text-[#8C7A6B] shrink-0" />
         <input
           type="text"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="Buscar produto por nome ou descrição..."
-          className="bg-transparent border-none outline-none text-sm text-[#2E251B] placeholder-[#A09384] w-full"
+          className="bg-transparent border-none outline-none text-xs sm:text-sm text-[#2E251B] placeholder-[#A09384] w-full"
         />
       </div>
 
@@ -283,12 +282,12 @@ export default function CardapioManager({ tenantId }: { tenantId: string }) {
           <span>Carregando catálogo...</span>
         </div>
       ) : filteredProducts.length === 0 ? (
-        <div className="bg-white border border-[#EBE2D5] rounded-2xl p-12 text-center text-sm text-[#8C7A6B]">
+        <div className="bg-white border border-[#EBE2D5] rounded-2xl p-8 sm:p-12 text-center text-xs sm:text-sm text-[#8C7A6B]">
           Nenhum produto cadastrado com os critérios de busca.
         </div>
       ) : (
-        <div className="bg-white border border-[#EBE2D5] rounded-2xl overflow-hidden shadow-sm">
-          <table className="w-full text-left border-collapse">
+        <div className="bg-white border border-[#EBE2D5] rounded-2xl overflow-x-auto shadow-sm">
+          <table className="w-full text-left border-collapse min-w-[600px]">
             <thead>
               <tr className="bg-[#FAF7F2] border-b border-[#EBE2D5] text-[10px] font-bold text-[#6B5A4B] uppercase tracking-wider">
                 <th className="p-4 pl-6">Item</th>

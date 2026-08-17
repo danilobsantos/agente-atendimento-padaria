@@ -10,39 +10,63 @@ export function useSocket(tenantId: string) {
   useEffect(() => {
     if (!tenantId) return;
 
-    // Connect to the WebSocket server
-    const socketUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL || "http://localhost:3001";
-    const socketInstance = io(socketUrl);
-
-    const timer = setTimeout(() => {
-      setSocket(socketInstance);
-    }, 0);
-
-    const handleConnect = () => {
-      setIsConnected(true);
-      console.log("🔌 Connected to WebSocket server");
-      // Join the tenant's room
-      socketInstance.emit("join", tenantId);
-    };
-
-    const handleDisconnect = () => {
-      setIsConnected(false);
-      console.log("🔌 Disconnected from WebSocket server");
-    };
-
-    if (socketInstance.connected) {
-      handleConnect();
+    // Determina URL do WebSocket de forma segura para HTTPS e acessos por tunnel / IP externo
+    let socketUrl = process.env.NEXT_PUBLIC_WEBSOCKET_URL;
+    
+    if (!socketUrl) {
+      if (typeof window !== "undefined" && window.location.hostname !== "localhost" && window.location.hostname !== "127.0.0.1") {
+        // Se acessado remotamente (ex: tunnel cloudflare ou IP local no celular), ignora localhost para não travar com Mixed Content
+        socketUrl = undefined;
+      } else {
+        socketUrl = "http://localhost:3001";
+      }
     }
 
-    socketInstance.on("connect", handleConnect);
-    socketInstance.on("disconnect", handleDisconnect);
+    if (!socketUrl) {
+      console.warn("⚠️ WebSocket desativado para conexão remota sem NEXT_PUBLIC_WEBSOCKET_URL.");
+      return;
+    }
 
-    return () => {
-      clearTimeout(timer);
-      socketInstance.off("connect", handleConnect);
-      socketInstance.off("disconnect", handleDisconnect);
-      socketInstance.disconnect();
-    };
+    try {
+      const socketInstance = io(socketUrl, {
+        transports: ["websocket", "polling"],
+        timeout: 5000,
+      });
+
+      const timer = setTimeout(() => {
+        setSocket(socketInstance);
+      }, 0);
+
+      const handleConnect = () => {
+        setIsConnected(true);
+        console.log("🔌 Connected to WebSocket server");
+        socketInstance.emit("join", tenantId);
+      };
+
+      const handleDisconnect = () => {
+        setIsConnected(false);
+        console.log("🔌 Disconnected from WebSocket server");
+      };
+
+      if (socketInstance.connected) {
+        handleConnect();
+      }
+
+      socketInstance.on("connect", handleConnect);
+      socketInstance.on("disconnect", handleDisconnect);
+      socketInstance.on("connect_error", (err) => {
+        console.warn("⚠️ WebSocket connection error:", err.message);
+      });
+
+      return () => {
+        clearTimeout(timer);
+        socketInstance.off("connect", handleConnect);
+        socketInstance.off("disconnect", handleDisconnect);
+        socketInstance.disconnect();
+      };
+    } catch (err) {
+      console.error("Failed to initialize Socket.io:", err);
+    }
   }, [tenantId]);
 
   return {

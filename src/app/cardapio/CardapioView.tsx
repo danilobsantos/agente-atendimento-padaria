@@ -405,9 +405,9 @@ export default function CardapioView({
 
       {/* 4.5. Extras Selection Modal */}
       {extraModalProduct && (
-        <div className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-40 flex items-end justify-center sm:items-center">
-          <div className="w-full max-w-md bg-[#FAF7F2] border-t sm:border border-[#EBE2D5] rounded-t-2xl sm:rounded-2xl shadow-2xl max-h-[85vh] flex flex-col">
-            <div className="p-6 border-b border-[#EBE2D5] flex justify-between items-center bg-white shadow-sm rounded-t-2xl shrink-0">
+        <div className="fixed inset-0 bg-slate-950/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="w-full max-w-md bg-[#FAF7F2] border border-[#EBE2D5] rounded-2xl shadow-2xl max-h-[85vh] flex flex-col overflow-hidden">
+            <div className="p-6 border-b border-[#EBE2D5] flex justify-between items-center bg-white shadow-sm shrink-0">
               <div>
                 <h3 className="font-serif font-bold text-xl text-amber-950">{extraModalProduct.name}</h3>
                 <p className="text-xs text-[#6B5A4B] mt-0.5">
@@ -415,8 +415,9 @@ export default function CardapioView({
                 </p>
               </div>
               <button
+                type="button"
                 onClick={() => setExtraModalProduct(null)}
-                className="p-1 rounded-full hover:bg-[#FAF7F2] text-[#6B5A4B] cursor-pointer"
+                className="p-2 -mr-2 rounded-full hover:bg-[#FAF7F2] active:bg-[#EBE2D5] text-[#6B5A4B] cursor-pointer touch-manipulation"
               >
                 <X className="h-6 w-6" />
               </button>
@@ -427,9 +428,10 @@ export default function CardapioView({
                 const selected = selectedExtras.some((e) => e.id === extra.id);
                 return (
                   <button
+                    type="button"
                     key={extra.id}
                     onClick={() => toggleExtra(extra)}
-                    className={`w-full flex items-center justify-between gap-4 p-4 rounded-xl border text-left transition-all cursor-pointer ${
+                    className={`w-full flex items-center justify-between gap-4 p-4 rounded-xl border text-left transition-all cursor-pointer touch-manipulation active:scale-[0.98] ${
                       selected
                         ? "bg-amber-700/10 border-amber-700 text-amber-950"
                         : "bg-white border-[#EBE2D5]/70 hover:border-amber-900/20"
@@ -456,7 +458,7 @@ export default function CardapioView({
               })}
             </div>
 
-            <div className="p-6 border-t border-[#EBE2D5] bg-white space-y-3 shrink-0">
+            <div className="p-6 border-t border-[#EBE2D5] bg-white space-y-3 shrink-0 rounded-b-2xl">
               <div className="flex justify-between items-center text-[#6B5A4B] text-sm">
                 <span>{selectedExtras.length > 0 ? `${selectedExtras.length} opcional(is) selecionado(s)` : "Nenhum opcional"}</span>
                 <span className="font-semibold text-[#2E251B]">
@@ -464,11 +466,12 @@ export default function CardapioView({
                 </span>
               </div>
               <button
+                type="button"
                 onClick={() => {
                   addToCart(extraModalProduct, selectedExtras);
                   setExtraModalProduct(null);
                 }}
-                className="w-full bg-amber-700 hover:bg-amber-800 text-white font-semibold py-4 rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-sm"
+                className="w-full bg-amber-700 hover:bg-amber-800 active:bg-amber-900 text-white font-semibold py-4 rounded-xl flex items-center justify-center gap-2 cursor-pointer shadow-sm touch-manipulation active:scale-[0.98]"
               >
                 <span>Adicionar ao carrinho</span>
                 <ShoppingBag className="h-4 w-4" />

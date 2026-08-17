@@ -60,7 +60,9 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [orderToDelete, setOrderToDelete] = useState<string | null>(null);
+  const [selectedOrderDetails, setSelectedOrderDetails] = useState<Order | null>(null);
   const [activeHighlightId, setActiveHighlightId] = useState<string | null>(null);
+  const [mobileTab, setMobileTab] = useState<string>("CONFIRMED");
   const [autoPrintEnabled, setAutoPrintEnabled] = useState<boolean>(false);
   const autoPrintRef = React.useRef(autoPrintEnabled);
   const [whatsConnected, setWhatsConnected] = useState<boolean | null>(null);
@@ -243,85 +245,121 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
   };
 
   return (
-    <div className="p-4 space-y-6 flex-1 flex flex-col overflow-hidden bg-[#FAF7F2]">
-      {/* Top Title & Stats */}
-      <div className="flex justify-between items-center shrink-0">
+    <div className="p-3 sm:p-4 space-y-4 sm:space-y-6 flex-1 flex flex-col overflow-hidden bg-[#FAF7F2]">
+      {/* Top Title & Controls */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 shrink-0">
         <div>
-          <h1 className="text-3xl font-serif font-bold text-amber-950 flex items-center gap-2">
-            <Coffee className="text-amber-700 h-7 w-7" />
+          <h1 className="text-2xl sm:text-3xl font-serif font-bold text-amber-950 flex items-center gap-2">
+            <Coffee className="text-amber-700 h-6 w-6 sm:h-7 sm:w-7" />
             Gestão de Pedidos
           </h1>
-          <p className="text-xs text-[#6B5A4B] font-light mt-1">
-            Painel Kanban integrado em tempo real. Veja e separe os pedidos recebidos.
+          <p className="text-xs text-[#6B5A4B] font-light mt-0.5 sm:mt-1">
+            Painel Kanban em tempo real.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+
+        {/* Action Controls */}
+        <div className="flex items-center gap-2 overflow-x-auto pb-1 md:pb-0">
           {/* Auto-Print Toggle Button */}
           <button
             onClick={toggleAutoPrint}
-            className={`flex items-center gap-2 text-xs border px-3.5 py-2 rounded-full shadow-sm transition-all cursor-pointer ${autoPrintEnabled
-              ? "bg-amber-600/10 border-amber-600/30 text-amber-900 font-bold"
-              : "bg-white border-[#EBE2D5] text-[#8C7A6B] hover:text-[#2E251B]"
-              }`}
+            className={`flex items-center gap-1.5 text-xs border px-3 py-1.5 sm:py-2 rounded-full shadow-sm transition-all cursor-pointer shrink-0 ${
+              autoPrintEnabled
+                ? "bg-amber-600/10 border-amber-600/30 text-amber-900 font-bold"
+                : "bg-white border-[#EBE2D5] text-[#8C7A6B] hover:text-[#2E251B]"
+            }`}
             title="Impressão automática de cupom (80mm) ao receber novo pedido"
           >
             <Printer className={`h-3.5 w-3.5 ${autoPrintEnabled ? "text-amber-700" : "text-[#8C7A6B]"}`} />
-            <span>Auto-Impressão: <strong>{autoPrintEnabled ? "Ativada" : "Desativada"}</strong></span>
+            <span>Auto-Impressão: <strong>{autoPrintEnabled ? "On" : "Off"}</strong></span>
           </button>
 
           {/* Notification Sound Toggle */}
           <button
             onClick={toggleSound}
             title={soundEnabled ? "Som das notificações ativado" : "Som das notificações desativado"}
-            className="flex items-center gap-2 text-xs bg-white border border-[#EBE2D5] px-3.5 py-2 rounded-full shadow-sm cursor-pointer hover:border-amber-700/30 transition-colors"
+            className="flex items-center gap-1.5 text-xs bg-white border border-[#EBE2D5] px-3 py-1.5 sm:py-2 rounded-full shadow-sm cursor-pointer hover:border-amber-700/30 transition-colors shrink-0"
           >
             {soundEnabled ? (
               <Bell className="h-3.5 w-3.5 text-amber-700" />
             ) : (
               <BellOff className="h-3.5 w-3.5 text-[#8C7A6B]" />
             )}
-            <span className="text-[#2E251B] font-semibold">Notificações</span>
+            <span className="text-[#2E251B] font-semibold hidden sm:inline">Notificações</span>
           </button>
 
           {/* WhatsApp Connection Status */}
           <a
             href="/admin/empresa"
             title="Status da conexão WhatsApp (Evolution Go). Clique para gerenciar."
-            className={`flex items-center gap-2 text-xs bg-white border px-3.5 py-2 rounded-full shadow-sm cursor-pointer hover:border-amber-700/30 transition-colors ${whatsConnected === null
-              ? "border-[#EBE2D5]"
-              : whatsConnected
+            className={`flex items-center gap-1.5 text-xs bg-white border px-3 py-1.5 sm:py-2 rounded-full shadow-sm cursor-pointer hover:border-amber-700/30 transition-colors shrink-0 ${
+              whatsConnected === null
+                ? "border-[#EBE2D5]"
+                : whatsConnected
                 ? "border-emerald-300"
                 : "border-red-300"
-              }`}
+            }`}
           >
             <span
-              className={`h-2.5 w-2.5 rounded-full ${whatsConnected === null
-                ? "bg-amber-400 animate-pulse"
-                : whatsConnected
+              className={`h-2.5 w-2.5 rounded-full ${
+                whatsConnected === null
+                  ? "bg-amber-400 animate-pulse"
+                  : whatsConnected
                   ? "bg-emerald-500"
                   : "bg-red-500 animate-pulse"
-                }`}
+              }`}
             />
             <span className="text-[#2E251B] font-semibold">
               {whatsConnected === null
                 ? "WhatsApp..."
                 : whatsConnected
-                  ? "WhatsApp Conectado"
-                  : "WhatsApp Desconectado"}
+                ? "WhatsApp On"
+                : "WhatsApp Off"}
             </span>
           </a>
         </div>
       </div>
 
-      {/* Kanban Board Grid */}
+      {/* Mobile Column Switcher Tabs (Only visible on screens < md) */}
+      <div className="flex md:hidden bg-white border border-[#EBE2D5] p-1 rounded-xl shrink-0 gap-1 overflow-x-auto">
+        {statusColumns.map((col) => {
+          const count = orders.filter((o) => o.status === col.key).length;
+          const isActive = mobileTab === col.key;
+          return (
+            <button
+              key={col.key}
+              onClick={() => setMobileTab(col.key)}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
+                isActive
+                  ? "bg-[#FAF7F2] text-amber-950 border border-[#EBE2D5] shadow-xs"
+                  : "text-[#8C7A6B] hover:text-[#2E251B]"
+              }`}
+            >
+              <span>{col.label.split(" ")[0]}</span>
+              <span
+                className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
+                  isActive ? "bg-amber-700 text-white" : "bg-[#FAF7F2] text-[#8C7A6B] border border-[#EBE2D5]"
+                }`}
+              >
+                {count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Kanban Board Grid (Responsive: Tab mode in Mobile, 4-col in MD+) */}
       <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-3 overflow-hidden">
         {statusColumns.map((col) => {
           const colOrders = orders.filter((o) => o.status === col.key);
+          const isVisibleOnMobile = mobileTab === col.key;
 
           return (
             <div
               key={col.key}
-              className={`rounded-2xl border flex flex-col overflow-hidden shadow-sm ${col.color.split(" ")[1]} ${col.color.split(" ")[2]}`}
+              className={`rounded-2xl border flex-col overflow-hidden shadow-sm ${col.color.split(" ")[1]} ${col.color.split(" ")[2]} ${
+                isVisibleOnMobile ? "flex flex-1 h-full" : "hidden md:flex"
+              }`}
             >
               {/* Header column */}
               <div className="p-4 bg-white border-b border-[#EBE2D5] flex justify-between items-center shrink-0 shadow-sm">
@@ -344,9 +382,10 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
                       <div
                         key={order.id}
                         id={`order-card-${order.id}`}
-                        className={`bg-white border border-t-[3px] rounded-xl p-4 space-y-4 transition-all duration-300 shadow-[0_2px_8px_rgba(46,37,27,0.02)] ${isHighlighted
+                        onClick={() => setSelectedOrderDetails(order)}
+                        className={`bg-white border border-t-[3px] rounded-xl p-4 space-y-4 transition-all duration-300 shadow-[0_2px_8px_rgba(46,37,27,0.02)] cursor-pointer ${isHighlighted
                           ? "border-amber-600 ring-2 ring-amber-500/50 shadow-[0_0_25px_rgba(217,119,6,0.25)] scale-[1.02] border-t-amber-600 animate-pulse"
-                          : "border-[#EBE2D5]/70 hover:border-amber-700/30 hover:scale-[1.01]"
+                          : "border-[#EBE2D5]/70 hover:border-amber-700/40 hover:shadow-md hover:scale-[1.01]"
                           }`}
                         style={{
                           borderTopColor: isHighlighted
@@ -360,9 +399,9 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
                                   : "#10b981",
                         }}
                       >
-                        {/* Card Header: Source, Date */}
-                        <div className="flex items-center border-b border-[#FAF7F2] pb-2 min-w-0">
-                          <div className="flex flex-wrap items-center gap-1.5 min-w-0 w-full">
+                        {/* Card Header: ID e Entrega/Retirada */}
+                        <div className="flex items-center justify-between border-b border-[#FAF7F2] pb-2 min-w-0">
+                          <div className="flex items-center gap-1.5 min-w-0">
                             <span className="font-mono font-extrabold text-xs bg-amber-600/10 text-amber-900 border border-amber-600/20 px-2.5 py-0.5 rounded-full shrink-0">
                               {formatOrderNumber(order.id)}
                             </span>
@@ -373,15 +412,6 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
                             ) : (
                               <span className="flex items-center gap-1 text-[10px] bg-violet-500/10 text-violet-800 border border-violet-500/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0">
                                 <MapPin className="h-3 w-3" /> Retirada
-                              </span>
-                            )}
-                            {order.source === "WHATSAPP" ? (
-                              <span className="flex items-center gap-1 text-[10px] bg-emerald-500/10 text-emerald-800 border border-emerald-500/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0">
-                                <MessageSquare className="h-3 w-3" /> WhatsApp
-                              </span>
-                            ) : (
-                              <span className="flex items-center gap-1 text-[10px] bg-sky-500/10 text-sky-800 border border-sky-500/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0">
-                                <Globe className="h-3 w-3" /> Cardápio
                               </span>
                             )}
                           </div>
@@ -400,64 +430,8 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
                           </div>
                         </div>
 
-                        {/* Items list */}
-                        <div className="bg-[#FAF7F2] border border-[#EBE2D5] p-2.5 rounded-lg space-y-2 text-xs text-[#6B5A4B]">
-                          {order.items.map((i) => (
-                            <div key={i.id} className="space-y-0.5">
-                              <div className="flex justify-between gap-2">
-                                <span className="font-medium text-[#2E251B] line-clamp-1">
-                                  {i.quantity}x {i.product.name}
-                                </span>
-                                <span className="text-[#8C7A6B] shrink-0 font-light">
-                                  R$ {(i.price * i.quantity).toFixed(2)}
-                                </span>
-                              </div>
-                              {i.additionalItems && i.additionalItems.length > 0 && (
-                                <div className="pl-3 space-y-0.5">
-                                  {i.additionalItems.map((a) => (
-                                    <div key={a.id} className="text-[11px] text-amber-800 flex justify-between gap-2">
-                                      <span>+ {a.name}</span>
-                                      {a.price > 0 && (
-                                        <span className="text-[10px] text-amber-800/70">
-                                          +R$ {(a.price * i.quantity).toFixed(2)}
-                                        </span>
-                                      )}
-                                    </div>
-                                  ))}
-                                </div>
-                              )}
-                            </div>
-                          ))}
-
-                          <div className="pt-2 border-t border-[#EBE2D5]/70 flex justify-between items-center font-extrabold text-amber-950">
-                            <span>Total</span>
-                            <span className="text-sm text-amber-700">R$ {order.total.toFixed(2)}</span>
-                          </div>
-                        </div>
-
-                        {/* Delivery address */}
-                        {order.deliveryAddress && (
-                          <div className="flex gap-2 text-xs text-[#6B5A4B] leading-normal border-t border-[#FAF7F2] pt-2">
-                            <MapPin className="h-4 w-4 text-[#8C7A6B] shrink-0 mt-0.5" />
-                            <div>
-                              <p className="font-bold text-[#2E251B]">Entrega em:</p>
-                              <p className="text-[#6B5A4B] mt-0.5">
-                                {order.deliveryAddress.fullAddress ||
-                                  `${order.deliveryAddress.street || ""}, ${order.deliveryAddress.number || ""} - ${order.deliveryAddress.neighborhood || ""}`}
-                              </p>
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Payment notes / details */}
-                        {order.notes && (
-                          <div className="text-[10px] text-[#8C7A6B] italic bg-[#F5EFE6] border border-[#EBE2D5]/40 p-2 rounded-lg">
-                            {order.notes}
-                          </div>
-                        )}
-
                         {/* Action buttons */}
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
                           {col.key !== "DELIVERED" ? (
                             <button
                               onClick={() => handleNextStatus(order.id, order.status)}
@@ -469,7 +443,7 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
                           ) : (
                             <div className="flex-1 text-[11px] font-bold text-emerald-600 flex items-center gap-1.5 justify-center py-2 bg-emerald-500/5 rounded-lg border border-emerald-500/10">
                               <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                              <span>Pedido Concluído</span>
+                              <span>Concluído</span>
                             </div>
                           )}
 
@@ -501,6 +475,148 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
         })}
       </div>
 
+      {/* Order Details Modal */}
+      {selectedOrderDetails && (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+          onClick={() => setSelectedOrderDetails(null)}
+        >
+          <div
+            className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl border border-[#EBE2D5] space-y-5 max-h-[90vh] overflow-y-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Modal Header */}
+            <div className="flex justify-between items-start border-b border-[#FAF7F2] pb-4">
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="font-mono font-extrabold text-sm bg-amber-600/10 text-amber-900 border border-amber-600/20 px-3 py-1 rounded-full">
+                    {formatOrderNumber(selectedOrderDetails.id)}
+                  </span>
+                  {selectedOrderDetails.deliveryAddress ? (
+                    <span className="flex items-center gap-1 text-xs bg-amber-600/10 text-amber-900 border border-amber-600/20 px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">
+                      <MapPin className="h-3.5 w-3.5" /> Entrega
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-xs bg-violet-500/10 text-violet-800 border border-violet-500/20 px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">
+                      <MapPin className="h-3.5 w-3.5" /> Retirada
+                    </span>
+                  )}
+                  {selectedOrderDetails.source === "WHATSAPP" ? (
+                    <span className="flex items-center gap-1 text-xs bg-emerald-500/10 text-emerald-800 border border-emerald-500/20 px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">
+                      <MessageSquare className="h-3.5 w-3.5" /> WhatsApp
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-xs bg-sky-500/10 text-sky-800 border border-sky-500/20 px-2.5 py-1 rounded-full font-bold uppercase tracking-wider">
+                      <Globe className="h-3.5 w-3.5" /> Cardápio
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-[#8C7A6B] mt-1.5">
+                  Pedido realizado em {new Date(selectedOrderDetails.createdAt).toLocaleString("pt-BR")}
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedOrderDetails(null)}
+                className="text-[#8C7A6B] hover:text-[#2E251B] p-1.5 rounded-lg hover:bg-[#FAF7F2] transition-colors cursor-pointer text-lg font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Customer Details */}
+            <div className="bg-[#FAF7F2] border border-[#EBE2D5] p-3.5 rounded-xl space-y-1.5 text-xs text-[#2E251B]">
+              <div className="flex items-center gap-2 font-bold text-sm text-amber-950">
+                <User className="h-4 w-4 text-amber-700 shrink-0" />
+                <span>{selectedOrderDetails.customer.name || "Cliente S/N"}</span>
+              </div>
+              <div className="text-[#8C7A6B] font-mono pl-6">
+                Telefone: {selectedOrderDetails.customer.phone}
+              </div>
+            </div>
+
+            {/* Items & Options List */}
+            <div className="space-y-2">
+              <h3 className="text-xs font-bold text-[#8C7A6B] uppercase tracking-wider">Itens do Pedido</h3>
+              <div className="bg-[#FAF7F2] border border-[#EBE2D5] p-3 rounded-xl space-y-2.5 text-xs text-[#6B5A4B]">
+                {selectedOrderDetails.items.map((i) => (
+                  <div key={i.id} className="space-y-1">
+                    <div className="flex justify-between gap-2">
+                      <span className="font-semibold text-[#2E251B]">
+                        {i.quantity}x {i.product.name}
+                      </span>
+                      <span className="text-[#8C7A6B] shrink-0 font-medium">
+                        R$ {(i.price * i.quantity).toFixed(2)}
+                      </span>
+                    </div>
+                    {i.additionalItems && i.additionalItems.length > 0 && (
+                      <div className="pl-3 space-y-1">
+                        {i.additionalItems.map((a) => (
+                          <div key={a.id} className="text-[11px] text-amber-800 flex justify-between gap-2">
+                            <span>+ {a.name}</span>
+                            {a.price > 0 && (
+                              <span className="text-[10px] text-amber-800/70">
+                                +R$ {(a.price * i.quantity).toFixed(2)}
+                              </span>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+
+                <div className="pt-2.5 border-t border-[#EBE2D5] flex justify-between items-center font-extrabold text-amber-950 text-sm">
+                  <span>Valor Total</span>
+                  <span className="text-base text-amber-700">R$ {selectedOrderDetails.total.toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Delivery address */}
+            {selectedOrderDetails.deliveryAddress && (
+              <div className="flex gap-2.5 text-xs text-[#6B5A4B] leading-normal bg-[#FAF7F2] border border-[#EBE2D5] p-3 rounded-xl">
+                <MapPin className="h-4 w-4 text-amber-700 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold text-[#2E251B]">Endereço de Entrega:</p>
+                  <p className="text-[#6B5A4B] mt-0.5">
+                    {selectedOrderDetails.deliveryAddress.fullAddress ||
+                      `${selectedOrderDetails.deliveryAddress.street || ""}, ${selectedOrderDetails.deliveryAddress.number || ""} - ${selectedOrderDetails.deliveryAddress.neighborhood || ""}`}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Payment notes / details */}
+            {selectedOrderDetails.notes && (
+              <div className="text-xs text-[#6B5A4B] bg-[#F5EFE6] border border-[#EBE2D5] p-3 rounded-xl">
+                <p className="font-bold text-[#2E251B] mb-0.5">Observações / Pagamento:</p>
+                <p className="italic">{selectedOrderDetails.notes}</p>
+              </div>
+            )}
+
+            {/* Actions */}
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={() => {
+                  printReceipt80mm(selectedOrderDetails);
+                }}
+                className="flex-1 bg-white hover:bg-amber-50 text-amber-900 border border-[#EBE2D5] hover:border-amber-300 font-bold py-2.5 rounded-xl text-xs flex items-center justify-center gap-2 transition-all cursor-pointer shadow-sm"
+              >
+                <Printer className="h-4 w-4" />
+                <span>Imprimir Cupom</span>
+              </button>
+
+              <button
+                onClick={() => setSelectedOrderDetails(null)}
+                className="flex-1 bg-[#FAF7F2] border border-[#EBE2D5] hover:bg-[#F5EFE6] text-[#2E251B] font-semibold py-2.5 rounded-xl text-xs transition-colors cursor-pointer"
+              >
+                Fechar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Cancel Confirmation Modal */}
       {orderToDelete && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
@@ -515,7 +631,7 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
             <div className="flex gap-3">
               <button
                 onClick={() => setOrderToDelete(null)}
-                className="flex-1 bg-white border border-[#EBE2D5] hover:bg-[#F5EFE6] text-[#2E251B] font-semibold py-2.5 rounded-xl text-sm transition-colors cursor-pointer"
+                className="flex-1 bg-[#FAF7F2] border border-[#EBE2D5] hover:bg-[#F5EFE6] text-[#2E251B] font-semibold py-2.5 rounded-xl text-sm transition-colors cursor-pointer"
               >
                 Voltar
               </button>

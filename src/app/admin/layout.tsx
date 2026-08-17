@@ -12,6 +12,8 @@ import {
   LogOut,
   User,
   Building2,
+  Menu,
+  X,
 } from "lucide-react";
 import { useSocket } from "@/hooks/use-socket";
 import OrderToast from "@/components/OrderToast";
@@ -42,6 +44,12 @@ export default function AdminLayout({
   const [toasts, setToasts] = useState<ToastData[]>([]);
   const [encomendaToasts, setEncomendaToasts] = useState<EncomendaToastData[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Close mobile menu on route change
+  useEffect(() => {
+    setIsMobileMenuOpen(false);
+  }, [pathname]);
 
   // Load sound preference
   useEffect(() => {
@@ -99,14 +107,12 @@ export default function AdminLayout({
     const handleNewOrder = async (data: { orderId: string; status: string; event: string }) => {
       console.log("[AdminLayout] Real-time order event received:", data);
 
-      // We only alert on ORDER_CREATED event
       if (data.event === "ORDER_CREATED") {
         try {
           const res = await fetch(`/api/orders/${data.orderId}`);
           if (res.ok) {
             const order = await res.json();
 
-            // Add visual toast
             setToasts((prev) => [
               ...prev,
               {
@@ -116,7 +122,6 @@ export default function AdminLayout({
               },
             ]);
 
-            // Play notification sound if enabled
             if (soundEnabled) {
               const audio = new Audio("/notification.wav");
               audio.play().catch((err) => {
@@ -199,15 +204,35 @@ export default function AdminLayout({
   ];
 
   return (
-    <div className="flex h-screen bg-[#FAF7F2] text-[#2E251B] font-sans antialiased">
-      {/* Sidebar */}
-      <aside className="w-64 border-r border-[#EBE2D5] bg-white flex flex-col shrink-0 shadow-[4px_0_24px_rgba(46,37,27,0.02)]">
+    <div className="flex h-screen bg-[#FAF7F2] text-[#2E251B] font-sans antialiased overflow-hidden">
+      {/* Backdrop for Mobile Sidebar Drawer */}
+      {isMobileMenuOpen && (
+        <div
+          className="fixed inset-0 bg-slate-950/40 backdrop-blur-sm z-40 md:hidden"
+          onClick={() => setIsMobileMenuOpen(false)}
+        />
+      )}
+
+      {/* Sidebar Drawer */}
+      <aside
+        className={`fixed md:static inset-y-0 left-0 z-50 w-64 border-r border-[#EBE2D5] bg-white flex flex-col shrink-0 shadow-[4px_0_24px_rgba(46,37,27,0.04)] transition-transform duration-300 ease-in-out md:translate-x-0 ${
+          isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+        }`}
+      >
         {/* Brand */}
-        <div className="h-16 flex items-center gap-3 px-6 border-b border-[#EBE2D5] shrink-0">
-          <div className="bg-[#FAF7F2] p-1.5 rounded-lg border border-[#EBE2D5]">
-            <Coffee className="h-5 w-5 text-amber-700 animate-pulse" />
+        <div className="h-16 flex items-center justify-between px-6 border-b border-[#EBE2D5] shrink-0">
+          <div className="flex items-center gap-3">
+            <div className="bg-[#FAF7F2] p-1.5 rounded-lg border border-[#EBE2D5]">
+              <Coffee className="h-5 w-5 text-amber-700 animate-pulse" />
+            </div>
+            <span className="font-serif font-bold text-lg tracking-wide text-amber-950">SABOR DE MINAS</span>
           </div>
-          <span className="font-serif font-bold text-lg tracking-wide text-amber-950">SABOR DE MINAS</span>
+          <button
+            onClick={() => setIsMobileMenuOpen(false)}
+            className="md:hidden p-1.5 text-[#8C7A6B] hover:text-[#2E251B] rounded-lg hover:bg-[#FAF7F2]"
+          >
+            <X className="h-5 w-5" />
+          </button>
         </div>
 
         {/* Navigation */}
@@ -219,10 +244,11 @@ export default function AdminLayout({
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${isActive
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${
+                  isActive
                     ? "bg-amber-600/5 text-amber-800 border-l-2 border-amber-700 rounded-l-none"
                     : "text-[#6B5A4B] hover:text-[#2E251B] hover:bg-[#F5EFE6]/60"
-                  }`}
+                }`}
               >
                 <Icon className={`h-5 w-5 ${isActive ? "text-amber-700" : "text-[#8C7A6B]"}`} />
                 <span>{item.label}</span>
@@ -247,11 +273,48 @@ export default function AdminLayout({
       </aside>
 
       {/* Main Content Area */}
-      <main className="flex-1 flex flex-col overflow-hidden bg-[#FAF7F2]">
-        <SoundContext.Provider value={{ soundEnabled, toggleSound }}>
-          {children}
-        </SoundContext.Provider>
-      </main>
+      <div className="flex-1 flex flex-col h-full overflow-hidden bg-[#FAF7F2]">
+        {/* Top Navbar for Mobile */}
+        <header className="md:hidden h-14 bg-white border-b border-[#EBE2D5] px-4 flex items-center justify-between shrink-0 shadow-sm z-30">
+          <button
+            onClick={() => setIsMobileMenuOpen(true)}
+            className="p-2 text-[#6B5A4B] hover:text-[#2E251B] rounded-lg hover:bg-[#FAF7F2]"
+          >
+            <Menu className="h-6 w-6" />
+          </button>
+          <div className="flex items-center gap-2">
+            <Coffee className="h-5 w-5 text-amber-700" />
+            <span className="font-serif font-bold text-base text-amber-950">Sabor de Minas</span>
+          </div>
+          <div className="w-8" />
+        </header>
+
+        <main className="flex-1 flex flex-col overflow-hidden bg-[#FAF7F2] pb-16 md:pb-0">
+          <SoundContext.Provider value={{ soundEnabled, toggleSound }}>
+            {children}
+          </SoundContext.Provider>
+        </main>
+
+        {/* Bottom Navigation for Mobile */}
+        <nav className="md:hidden fixed bottom-0 left-0 right-0 h-16 bg-white border-t border-[#EBE2D5] flex items-center justify-around z-30 shadow-lg">
+          {menuItems.slice(0, 4).map((item) => {
+            const Icon = item.icon;
+            const isActive = pathname === item.href;
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                className={`flex flex-col items-center gap-1 py-1 px-3 rounded-lg text-[10px] font-semibold transition-colors ${
+                  isActive ? "text-amber-800" : "text-[#8C7A6B] hover:text-[#2E251B]"
+                }`}
+              >
+                <Icon className={`h-5 w-5 ${isActive ? "text-amber-700" : "text-[#8C7A6B]"}`} />
+                <span>{item.label}</span>
+              </Link>
+            );
+          })}
+        </nav>
+      </div>
 
       {/* Floating Toast Containers (Top Right) */}
       <div className="fixed top-4 right-4 z-50 flex flex-col gap-3 pointer-events-none">
