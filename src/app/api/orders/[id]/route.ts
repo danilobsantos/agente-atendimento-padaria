@@ -128,7 +128,10 @@ export async function PATCH(request: Request, { params }: RouteParams) {
 
     // Notify the customer in background so the kanban card moves instantly (no LLM involved)
     if (body.status === "DISPATCHED") {
-      const dispatchText = `Seu pedido ${formatOrderNumber(order.id)} saiu para entrega.`;
+      const isPickup = !order.deliveryAddress;
+      const dispatchText = isPickup
+        ? `Seu pedido ${formatOrderNumber(order.id)} está pronto para retirada! Pode vir buscar.`
+        : `Seu pedido ${formatOrderNumber(order.id)} saiu para entrega.`;
       void sendChunkedResponse({
         phone: order.customer.phone,
         customerId: order.customerId,

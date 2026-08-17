@@ -147,6 +147,22 @@ export async function POST(request: Request) {
       JSON.stringify({ orderId: order.id, status: order.status, event: "ORDER_CREATED" })
     );
 
+    // Send the order summary to the customer via WhatsApp (background)
+    if (source === "WEB" && order.customer.phone) {
+      const { sendChunkedResponse } = await import("@/lib/bot/message-sender");
+      const { formatOrderSummary } = await import("@/lib/utils/format-order-summary");
+      void sendChunkedResponse({
+        phone: order.customer.phone,
+        customerId: order.customerId,
+        tenantId: order.tenantId,
+        customerName: order.customer.name ?? "",
+        isHumanAttending: order.customer.isHumanAttending ?? false,
+        text: formatOrderSummary(order),
+      }).catch((e) => {
+        console.error("Failed to send web order summary:", e);
+      });
+    }
+
     return NextResponse.json(order, { status: 201 });
   } catch (error) {
     console.error("[Orders] Error creating order:", error);

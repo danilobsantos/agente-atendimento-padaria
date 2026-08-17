@@ -50,7 +50,7 @@ interface Order {
 const statusColumns = [
   { key: "CONFIRMED", label: "Novos Pedidos", color: "border-t-rose-500 bg-[#FFF5F5] border-[#FFE3E3] text-rose-700" },
   { key: "PREPARING", label: "Em Preparo", color: "border-t-amber-500 bg-[#FFFBF2] border-[#FDF0D5] text-amber-800" },
-  { key: "DISPATCHED", label: "Saiu para Entrega", color: "border-t-sky-500 bg-[#F0F9FF] border-[#E0F2FE] text-sky-700" },
+  { key: "DISPATCHED", label: "Saiu para Entrega/Retirada", color: "border-t-sky-500 bg-[#F0F9FF] border-[#E0F2FE] text-sky-700" },
   { key: "DELIVERED", label: "Entregues", color: "border-t-emerald-500 bg-[#F0FDF4] border-[#DCFCE7] text-emerald-800" },
 ];
 
@@ -111,7 +111,7 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
   // Manage highlight fade and URL cleanup
   useEffect(() => {
     if (!highlightId) return;
-    
+
     const highlightTimer = setTimeout(() => {
       setActiveHighlightId(highlightId);
     }, 0);
@@ -236,14 +236,14 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
   };
 
   const getNextButtonLabel = (status: string) => {
-    if (status === "CONFIRMED") return "Iniciar Preparo";
+    if (status === "CONFIRMED") return "Preparar";
     if (status === "PREPARING") return "Despachar";
     if (status === "DISPATCHED") return "Finalizar";
     return "";
   };
 
   return (
-    <div className="p-8 space-y-6 flex-1 flex flex-col overflow-hidden bg-[#FAF7F2]">
+    <div className="p-4 space-y-6 flex-1 flex flex-col overflow-hidden bg-[#FAF7F2]">
       {/* Top Title & Stats */}
       <div className="flex justify-between items-center shrink-0">
         <div>
@@ -259,11 +259,10 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
           {/* Auto-Print Toggle Button */}
           <button
             onClick={toggleAutoPrint}
-            className={`flex items-center gap-2 text-xs border px-3.5 py-2 rounded-full shadow-sm transition-all cursor-pointer ${
-              autoPrintEnabled
-                ? "bg-amber-600/10 border-amber-600/30 text-amber-900 font-bold"
-                : "bg-white border-[#EBE2D5] text-[#8C7A6B] hover:text-[#2E251B]"
-            }`}
+            className={`flex items-center gap-2 text-xs border px-3.5 py-2 rounded-full shadow-sm transition-all cursor-pointer ${autoPrintEnabled
+              ? "bg-amber-600/10 border-amber-600/30 text-amber-900 font-bold"
+              : "bg-white border-[#EBE2D5] text-[#8C7A6B] hover:text-[#2E251B]"
+              }`}
             title="Impressão automática de cupom (80mm) ao receber novo pedido"
           >
             <Printer className={`h-3.5 w-3.5 ${autoPrintEnabled ? "text-amber-700" : "text-[#8C7A6B]"}`} />
@@ -288,36 +287,34 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
           <a
             href="/admin/empresa"
             title="Status da conexão WhatsApp (Evolution Go). Clique para gerenciar."
-            className={`flex items-center gap-2 text-xs bg-white border px-3.5 py-2 rounded-full shadow-sm cursor-pointer hover:border-amber-700/30 transition-colors ${
-              whatsConnected === null
-                ? "border-[#EBE2D5]"
-                : whatsConnected
+            className={`flex items-center gap-2 text-xs bg-white border px-3.5 py-2 rounded-full shadow-sm cursor-pointer hover:border-amber-700/30 transition-colors ${whatsConnected === null
+              ? "border-[#EBE2D5]"
+              : whatsConnected
                 ? "border-emerald-300"
                 : "border-red-300"
-            }`}
+              }`}
           >
             <span
-              className={`h-2.5 w-2.5 rounded-full ${
-                whatsConnected === null
-                  ? "bg-amber-400 animate-pulse"
-                  : whatsConnected
+              className={`h-2.5 w-2.5 rounded-full ${whatsConnected === null
+                ? "bg-amber-400 animate-pulse"
+                : whatsConnected
                   ? "bg-emerald-500"
                   : "bg-red-500 animate-pulse"
-              }`}
+                }`}
             />
             <span className="text-[#2E251B] font-semibold">
               {whatsConnected === null
                 ? "WhatsApp..."
                 : whatsConnected
-                ? "WhatsApp Conectado"
-                : "WhatsApp Desconectado"}
+                  ? "WhatsApp Conectado"
+                  : "WhatsApp Desconectado"}
             </span>
           </a>
         </div>
       </div>
 
       {/* Kanban Board Grid */}
-      <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-6 overflow-hidden">
+      <div className="flex-1 grid grid-cols-1 md:grid-cols-4 gap-3 overflow-hidden">
         {statusColumns.map((col) => {
           const colOrders = orders.filter((o) => o.status === col.key);
 
@@ -347,51 +344,47 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
                       <div
                         key={order.id}
                         id={`order-card-${order.id}`}
-                        className={`bg-white border border-t-[3px] rounded-xl p-4 space-y-4 transition-all duration-300 shadow-[0_2px_8px_rgba(46,37,27,0.02)] ${
-                          isHighlighted
-                            ? "border-amber-600 ring-2 ring-amber-500/50 shadow-[0_0_25px_rgba(217,119,6,0.25)] scale-[1.02] border-t-amber-600 animate-pulse"
-                            : "border-[#EBE2D5]/70 hover:border-amber-700/30 hover:scale-[1.01]"
-                        }`}
+                        className={`bg-white border border-t-[3px] rounded-xl p-4 space-y-4 transition-all duration-300 shadow-[0_2px_8px_rgba(46,37,27,0.02)] ${isHighlighted
+                          ? "border-amber-600 ring-2 ring-amber-500/50 shadow-[0_0_25px_rgba(217,119,6,0.25)] scale-[1.02] border-t-amber-600 animate-pulse"
+                          : "border-[#EBE2D5]/70 hover:border-amber-700/30 hover:scale-[1.01]"
+                          }`}
                         style={{
                           borderTopColor: isHighlighted
                             ? undefined
                             : col.key === "CONFIRMED"
-                            ? "#ef4444"
-                            : col.key === "PREPARING"
-                            ? "#f59e0b"
-                            : col.key === "DISPATCHED"
-                            ? "#0ea5e9"
-                            : "#10b981",
+                              ? "#ef4444"
+                              : col.key === "PREPARING"
+                                ? "#f59e0b"
+                                : col.key === "DISPATCHED"
+                                  ? "#0ea5e9"
+                                  : "#10b981",
                         }}
                       >
-                        {/* Card Header: Source, Total, Date */}
-                        <div className="flex justify-between items-center border-b border-[#FAF7F2] pb-2">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-mono font-extrabold text-xs bg-amber-600/10 text-amber-900 border border-amber-600/20 px-2 py-0.5 rounded-md">
+                        {/* Card Header: Source, Date */}
+                        <div className="flex items-center border-b border-[#FAF7F2] pb-2 min-w-0">
+                          <div className="flex flex-wrap items-center gap-1.5 min-w-0 w-full">
+                            <span className="font-mono font-extrabold text-xs bg-amber-600/10 text-amber-900 border border-amber-600/20 px-2.5 py-0.5 rounded-full shrink-0">
                               {formatOrderNumber(order.id)}
                             </span>
-                            {order.source === "WHATSAPP" ? (
-                              <span className="flex items-center gap-1 text-[10px] bg-emerald-500/10 text-emerald-800 border border-emerald-500/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
-                                <MessageSquare className="h-3 w-3" /> WhatsApp
-                              </span>
-                            ) : (
-                              <span className="flex items-center gap-1 text-[10px] bg-sky-500/10 text-sky-800 border border-sky-500/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
-                                <Globe className="h-3 w-3" /> Cardápio
-                              </span>
-                            )}
                             {order.deliveryAddress ? (
-                              <span className="flex items-center gap-1 text-[10px] bg-amber-600/10 text-amber-900 border border-amber-600/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                              <span className="flex items-center gap-1 text-[10px] bg-amber-600/10 text-amber-900 border border-amber-600/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0">
                                 <MapPin className="h-3 w-3" /> Entrega
                               </span>
                             ) : (
-                              <span className="flex items-center gap-1 text-[10px] bg-violet-500/10 text-violet-800 border border-violet-500/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">
+                              <span className="flex items-center gap-1 text-[10px] bg-violet-500/10 text-violet-800 border border-violet-500/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0">
                                 <MapPin className="h-3 w-3" /> Retirada
                               </span>
                             )}
+                            {order.source === "WHATSAPP" ? (
+                              <span className="flex items-center gap-1 text-[10px] bg-emerald-500/10 text-emerald-800 border border-emerald-500/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0">
+                                <MessageSquare className="h-3 w-3" /> WhatsApp
+                              </span>
+                            ) : (
+                              <span className="flex items-center gap-1 text-[10px] bg-sky-500/10 text-sky-800 border border-sky-500/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0">
+                                <Globe className="h-3 w-3" /> Cardápio
+                              </span>
+                            )}
                           </div>
-                          <span className="text-sm font-extrabold text-amber-700">
-                            R$ {order.total.toFixed(2)}
-                          </span>
                         </div>
 
                         {/* Customer info */}
@@ -408,26 +401,38 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
                         </div>
 
                         {/* Items list */}
-                        <div className="bg-[#FAF7F2] border border-[#EBE2D5] p-2.5 rounded-lg space-y-1.5 text-xs text-[#6B5A4B]">
+                        <div className="bg-[#FAF7F2] border border-[#EBE2D5] p-2.5 rounded-lg space-y-2 text-xs text-[#6B5A4B]">
                           {order.items.map((i) => (
-                            <div key={i.id} className="flex justify-between gap-2">
-                              <span className="font-medium text-[#2E251B] line-clamp-1">
-                                {i.quantity}x {i.product.name}
-                              </span>
-                              <span className="text-[#8C7A6B] shrink-0 font-light">
-                                R$ {(i.price * i.quantity).toFixed(2)}
-                              </span>
-                            </div>
-                          ))}
-                          {order.items
-                            .filter((i) => i.additionalItems && i.additionalItems.length > 0)
-                            .map((i) => (
-                              <div key={`extras-${i.id}`} className="flex justify-between gap-2">
-                                <span className="text-[11px] text-amber-800 line-clamp-1">
-                                  {(i.additionalItems || []).map((a) => `+ ${a.name}`).join(", ")}
+                            <div key={i.id} className="space-y-0.5">
+                              <div className="flex justify-between gap-2">
+                                <span className="font-medium text-[#2E251B] line-clamp-1">
+                                  {i.quantity}x {i.product.name}
+                                </span>
+                                <span className="text-[#8C7A6B] shrink-0 font-light">
+                                  R$ {(i.price * i.quantity).toFixed(2)}
                                 </span>
                               </div>
-                            ))}
+                              {i.additionalItems && i.additionalItems.length > 0 && (
+                                <div className="pl-3 space-y-0.5">
+                                  {i.additionalItems.map((a) => (
+                                    <div key={a.id} className="text-[11px] text-amber-800 flex justify-between gap-2">
+                                      <span>+ {a.name}</span>
+                                      {a.price > 0 && (
+                                        <span className="text-[10px] text-amber-800/70">
+                                          +R$ {(a.price * i.quantity).toFixed(2)}
+                                        </span>
+                                      )}
+                                    </div>
+                                  ))}
+                                </div>
+                              )}
+                            </div>
+                          ))}
+
+                          <div className="pt-2 border-t border-[#EBE2D5]/70 flex justify-between items-center font-extrabold text-amber-950">
+                            <span>Total</span>
+                            <span className="text-sm text-amber-700">R$ {order.total.toFixed(2)}</span>
+                          </div>
                         </div>
 
                         {/* Delivery address */}
@@ -437,8 +442,8 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
                             <div>
                               <p className="font-bold text-[#2E251B]">Entrega em:</p>
                               <p className="text-[#6B5A4B] mt-0.5">
-                                {order.deliveryAddress.fullAddress || 
-                                 `${order.deliveryAddress.street || ""}, ${order.deliveryAddress.number || ""} - ${order.deliveryAddress.neighborhood || ""}`}
+                                {order.deliveryAddress.fullAddress ||
+                                  `${order.deliveryAddress.street || ""}, ${order.deliveryAddress.number || ""} - ${order.deliveryAddress.neighborhood || ""}`}
                               </p>
                             </div>
                           </div>
