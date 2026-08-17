@@ -36,6 +36,7 @@ export default async function CardapioPage() {
     <CardapioView
       tenantId={tenant.id}
       tenantName={tenant.name}
+      tenantLogoUrl={tenant.logoUrl}
       categories={tenant.categories}
       products={tenant.products}
       additionalItems={tenant.additionalItems}

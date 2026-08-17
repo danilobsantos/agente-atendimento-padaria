@@ -43,6 +43,7 @@ interface CartItem {
 interface CardapioViewProps {
   tenantId: string;
   tenantName: string;
+  tenantLogoUrl?: string | null;
   categories: Category[];
   products: Product[];
   additionalItems: AdditionalItem[];
@@ -51,6 +52,7 @@ interface CardapioViewProps {
 export default function CardapioView({
   tenantId,
   tenantName,
+  tenantLogoUrl,
   categories,
   products,
   additionalItems,
@@ -204,10 +206,18 @@ export default function CardapioView({
     <div className="min-h-screen bg-[#FAF7F2] text-[#2E251B] font-sans pb-24 antialiased">
       {/* 1. Header */}
       <header className="sticky top-0 bg-white/90 backdrop-blur-md border-b border-[#EBE2D5] h-16 px-6 flex justify-between items-center z-30 shadow-sm">
-        <div className="flex items-center gap-2">
-          <div className="bg-[#FAF7F2] p-1.5 rounded-lg border border-[#EBE2D5]">
-            <Coffee className="h-5 w-5 text-amber-700" />
-          </div>
+        <div className="flex items-center gap-2.5">
+          {tenantLogoUrl ? (
+            <img
+              src={tenantLogoUrl}
+              alt={tenantName}
+              className="h-10 w-10 object-contain rounded-lg border border-[#EBE2D5] bg-[#FAF7F2] p-0.5"
+            />
+          ) : (
+            <div className="bg-[#FAF7F2] p-1.5 rounded-lg border border-[#EBE2D5]">
+              <Coffee className="h-5 w-5 text-amber-700" />
+            </div>
+          )}
           <span className="font-serif font-bold text-lg text-amber-950 tracking-tight">{tenantName}</span>
         </div>
         <button

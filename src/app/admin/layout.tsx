@@ -41,6 +41,8 @@ export default function AdminLayout({
   const router = useRouter();
 
   const [tenantId, setTenantId] = useState<string | null>(null);
+  const [tenantName, setTenantName] = useState<string>("SABOR DE MINAS");
+  const [tenantLogoUrl, setTenantLogoUrl] = useState<string | null>(null);
   const [toasts, setToasts] = useState<ToastData[]>([]);
   const [encomendaToasts, setEncomendaToasts] = useState<EncomendaToastData[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -62,22 +64,22 @@ export default function AdminLayout({
     }
   }, []);
 
-  // Fetch tenantId from session
+  // Fetch company settings & tenantId from session
   useEffect(() => {
-    async function checkAuth() {
+    async function loadCompanyData() {
       try {
-        const res = await fetch("/api/auth/me");
+        const res = await fetch("/api/company-settings");
         if (res.ok) {
           const data = await res.json();
-          if (data.tenantId) {
-            setTenantId(data.tenantId);
-          }
+          if (data.id) setTenantId(data.id);
+          if (data.name) setTenantName(data.name);
+          if (data.logoUrl) setTenantLogoUrl(data.logoUrl);
         }
       } catch (err) {
-        console.error("Error checking auth status:", err);
+        console.error("Error loading company data for layout:", err);
       }
     }
-    checkAuth();
+    loadCompanyData();
   }, []);
 
   const { socket } = useSocket(tenantId || "");
@@ -221,11 +223,21 @@ export default function AdminLayout({
       >
         {/* Brand */}
         <div className="h-16 flex items-center justify-between px-6 border-b border-[#EBE2D5] shrink-0">
-          <div className="flex items-center gap-3">
-            <div className="bg-[#FAF7F2] p-1.5 rounded-lg border border-[#EBE2D5]">
-              <Coffee className="h-5 w-5 text-amber-700 animate-pulse" />
-            </div>
-            <span className="font-serif font-bold text-lg tracking-wide text-amber-950">SABOR DE MINAS</span>
+          <div className="flex items-center gap-3 min-w-0">
+            {tenantLogoUrl ? (
+              <img
+                src={tenantLogoUrl}
+                alt={tenantName}
+                className="h-9 w-9 object-contain rounded-lg border border-[#EBE2D5] bg-[#FAF7F2] p-0.5 shrink-0"
+              />
+            ) : (
+              <div className="bg-[#FAF7F2] p-1.5 rounded-lg border border-[#EBE2D5] shrink-0">
+                <Coffee className="h-5 w-5 text-amber-700 animate-pulse" />
+              </div>
+            )}
+            <span className="font-serif font-bold text-base tracking-wide text-amber-950 truncate">
+              {tenantName.toUpperCase()}
+            </span>
           </div>
           <button
             onClick={() => setIsMobileMenuOpen(false)}
@@ -282,9 +294,17 @@ export default function AdminLayout({
           >
             <Menu className="h-6 w-6" />
           </button>
-          <div className="flex items-center gap-2">
-            <Coffee className="h-5 w-5 text-amber-700" />
-            <span className="font-serif font-bold text-base text-amber-950">Sabor de Minas</span>
+          <div className="flex items-center gap-2 min-w-0 max-w-[200px]">
+            {tenantLogoUrl ? (
+              <img
+                src={tenantLogoUrl}
+                alt={tenantName}
+                className="h-7 w-7 object-contain rounded-md border border-[#EBE2D5] bg-[#FAF7F2] p-0.5 shrink-0"
+              />
+            ) : (
+              <Coffee className="h-5 w-5 text-amber-700 shrink-0" />
+            )}
+            <span className="font-serif font-bold text-sm text-amber-950 truncate">{tenantName}</span>
           </div>
           <div className="w-8" />
         </header>
