@@ -55,3 +55,35 @@ test("no thinkingConfig omits the field", async () => {
   assert.equal("thinkingConfig" in gc, false);
   assert.equal("thinkingLevel" in (gc as Record<string, unknown>), false);
 });
+
+test("tool response maps to role user with functionResponse", async () => {
+  const original = globalThis.fetch;
+  const bodyPromise = new Promise<Record<string, unknown>>((resolve) => {
+    globalThis.fetch = async (_input: string | URL | Request, init: RequestInit = {}) => {
+      globalThis.fetch = original;
+      resolve(JSON.parse(String(init.body)));
+      return new Response(JSON.stringify(OK_CANDIDATE), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    };
+    const messages: LLMMessage[] = [
+      { role: "user", content: "checa o estoque" },
+      { role: "assistant", content: "", tool_calls: [{ id: "1", name: "checar_estoque", arguments: "{}" }] },
+      { role: "tool", tool_call_id: "1", name: "checar_estoque", content: '{"disponivel":true}' },
+    ];
+    void new GeminiAdapter()
+      .generate(messages, { apiKey: "k", model: "gemini-3.5-flash" })
+      .catch(() => {});
+  });
+
+  const body = await bodyPromise;
+  const toolContent = (body.contents as Array<Record<string, unknown>>)[2];
+  assert.equal(toolContent.role, "user");
+  const fr = (toolContent.parts as Array<{ functionResponse?: unknown }>)[0].functionResponse as {
+    name: string;
+    response: unknown;
+  };
+  assert.equal(fr.name, "checar_estoque");
+  assert.deepEqual(fr.response, { result: '{"disponivel":true}' });
+});

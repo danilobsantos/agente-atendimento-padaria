@@ -32,7 +32,7 @@ export class GeminiAdapter implements LLMService {
     const contents = conversationMessages.map((msg) => {
       if (msg.role === "tool") {
         return {
-          role: "function",
+          role: "user",
           parts: [
             {
               functionResponse: {
