@@ -1,0 +1,59 @@
+# Deploy this file as a Docker Compose application in Dokploy.
+# Configure the two public domains in Dokploy's Domains UI; do not publish host
+# ports here. Dokploy routes HTTPS traffic to the container ports internally.
+
+x-app-build: &app-build
+  context: .
+  dockerfile: Dockerfile
+  args:
+    # These are public URLs, so Next.js must receive them while building.
+    NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?NEXT_PUBLIC_APP_URL is required}
+    NEXT_PUBLIC_WEBSOCKET_URL: ${NEXT_PUBLIC_WEBSOCKET_URL:?NEXT_PUBLIC_WEBSOCKET_URL is required}
+
+x-app-common: &app-common
+  image: agente-atendimento-padaria:${IMAGE_TAG:-latest}
+  restart: unless-stopped
+  networks:
+    - shared-services
+
+services:
+  web:
+    <<: *app-common
+    build: *app-build
+    command: ["npm", "run", "start"]
+    environment:
+      NODE_ENV: production
+      PORT: "3000"
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
+      REDIS_PREFIX: ${REDIS_PREFIX:-ag_delivery}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET is required}
+      EVOLUTION_API_URL: ${EVOLUTION_API_URL:?EVOLUTION_API_URL is required}
+      EVOLUTION_API_KEY: ${EVOLUTION_API_KEY:?EVOLUTION_API_KEY is required}
+      EVOLUTION_INSTANCE_NAME: ${EVOLUTION_INSTANCE_NAME:?EVOLUTION_INSTANCE_NAME is required}
+      EVOLUTION_INSTANCE_TOKEN: ${EVOLUTION_INSTANCE_TOKEN:?EVOLUTION_INSTANCE_TOKEN is required}
+      NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:?NEXT_PUBLIC_APP_URL is required}
+      NEXT_PUBLIC_WEBSOCKET_URL: ${NEXT_PUBLIC_WEBSOCKET_URL:?NEXT_PUBLIC_WEBSOCKET_URL is required}
+    volumes:
+      - uploads:/app/public/uploads
+
+  websocket:
+    <<: *app-common
+    build: *app-build
+    command: ["npm", "run", "websocket"]
+    environment:
+      NODE_ENV: production
+      PORT: "3001"
+      DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+      REDIS_URL: ${REDIS_URL:?REDIS_URL is required}
+      REDIS_PREFIX: ${REDIS_PREFIX:-ag_delivery}
+
+volumes:
+  uploads:
+
+networks:
+  # This network must already exist in Dokploy and contain the shared
+  # PostgreSQL and Redis services. Do not replace its internal hostnames with
+  # localhost.
+  shared-services:
+    external: true
