@@ -115,12 +115,19 @@ export async function POST(request: Request) {
       0
     );
 
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { deliveryFee: true },
+    });
+    const deliveryFee = deliveryAddress ? tenant?.deliveryFee ?? 0 : 0;
+
     const order = await prisma.order.create({
       data: {
         tenantId,
         customerId: finalCustomerId,
         source,
-        total,
+        total: total + deliveryFee,
+        deliveryFee,
         deliveryAddress: deliveryAddress ?? null,
         notes,
         status: source === "WEB" ? "CONFIRMED" : "PENDING",

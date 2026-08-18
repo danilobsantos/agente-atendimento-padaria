@@ -16,6 +16,7 @@ function toCompanyJson(tenant: {
   address: string | null;
   phone: string | null;
   logoUrl: string | null;
+  deliveryFee: number;
 }) {
   return {
     id: tenant.id,
@@ -24,6 +25,7 @@ function toCompanyJson(tenant: {
     address: tenant.address,
     phone: tenant.phone,
     logoUrl: tenant.logoUrl,
+    deliveryFee: tenant.deliveryFee,
   };
 }
 
@@ -59,6 +61,7 @@ export async function PUT(request: Request) {
   const cnpj = String(form.get("cnpj") || "").trim();
   const address = String(form.get("address") || "").trim();
   const phone = String(form.get("phone") || "").trim();
+  const deliveryFeeRaw = String(form.get("deliveryFee") || "").trim();
   const logo = form.get("logo");
 
   if (!name) {
@@ -66,6 +69,10 @@ export async function PUT(request: Request) {
   }
   if (cnpj && !isValidCnpj(cnpj)) {
     return NextResponse.json({ error: "CNPJ inválido" }, { status: 400 });
+  }
+  const deliveryFee = deliveryFeeRaw ? Number(deliveryFeeRaw.replace(",", ".")) : 0;
+  if (!Number.isFinite(deliveryFee) || deliveryFee < 0) {
+    return NextResponse.json({ error: "Taxa de entrega inválida" }, { status: 400 });
   }
 
   let logoUrl = tenant.logoUrl;
@@ -96,6 +103,7 @@ export async function PUT(request: Request) {
       cnpj: cnpj || null,
       address: address || null,
       phone: phone ? normalizePhone(phone) : null,
+      deliveryFee,
       ...(logoUrl !== tenant.logoUrl && { logoUrl }),
     },
   });

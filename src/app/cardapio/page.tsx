@@ -40,6 +40,7 @@ export default async function CardapioPage() {
       categories={tenant.categories}
       products={tenant.products}
       additionalItems={tenant.additionalItems}
+      deliveryFee={tenant.deliveryFee}
     />
   );
 }

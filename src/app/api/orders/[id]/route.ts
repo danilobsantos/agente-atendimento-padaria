@@ -34,7 +34,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     // Fetch current status to check transition constraints
     const existingOrder = await prisma.order.findUnique({
       where: { id },
-      select: { status: true },
+      select: { status: true, deliveryFee: true },
     });
 
     if (!existingOrder) {
@@ -88,7 +88,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       const total = newOrderItems.reduce(
         (sum: number, item: { price: number; quantity: number }) => sum + item.price * item.quantity,
         0
-      );
+      ) + existingOrder.deliveryFee;
 
       totalUpdate = { total };
       itemsUpdate = {

@@ -16,9 +16,10 @@ model Tenant {
   active    Boolean  @default(true)
   cnpj      String?  @map("cnpj")
   address   String?  @map("address")
-  phone     String?  @map("phone")
-  logoUrl   String?  @map("logo_url")
-  createdAt DateTime @default(now()) @map("created_at")
+  phone       String?  @map("phone")
+  logoUrl     String?  @map("logo_url")
+  deliveryFee Float    @default(0) @map("delivery_fee")
+  createdAt   DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   categories      Category[]
@@ -195,6 +196,7 @@ model Order {
   status          OrderStatus @default(PENDING)
   source          OrderSource
   total           Float       @default(0)
+  deliveryFee     Float       @default(0) @map("delivery_fee")
   deliveryAddress Json?       @map("delivery_address")
   notes           String?     @db.Text
 

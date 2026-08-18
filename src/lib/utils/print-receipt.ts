@@ -25,6 +25,7 @@ export interface PrintableOrder {
   status: string;
   source: "WHATSAPP" | "WEB";
   total: number;
+  deliveryFee?: number;
   deliveryAddress: {
     fullAddress?: string;
     street?: string;
@@ -223,6 +224,11 @@ export function printReceipt80mm(order: PrintableOrder): void {
           <span>Forma de Pagamento:</span>
           <span style="font-weight: bold;">${paymentMethod}</span>
         </div>
+        ${(order.deliveryFee ?? 0) > 0 ? `
+        <div class="total-row">
+          <span>TAXA DE ENTREGA:</span>
+          <span>R$ ${(order.deliveryFee ?? 0).toFixed(2).replace(".", ",")}</span>
+        </div>` : ""}
         <div class="divider"></div>
         <div class="total-row">
           <span>VALOR TOTAL:</span>

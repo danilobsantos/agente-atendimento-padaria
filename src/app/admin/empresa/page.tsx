@@ -45,6 +45,7 @@ export default async function EmpresaPage() {
           address: tenant.address,
           phone: tenant.phone,
           logoUrl: tenant.logoUrl,
+          deliveryFee: tenant.deliveryFee,
         }}
       />
 

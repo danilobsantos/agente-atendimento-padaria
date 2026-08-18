@@ -18,6 +18,7 @@ interface SummaryAddress {
 export interface SummarizableOrder {
   id: string;
   total: number;
+  deliveryFee?: number;
   notes: string | null;
   deliveryAddress: unknown;
   items: SummaryItem[];
@@ -55,7 +56,9 @@ export function formatOrderSummary(order: SummarizableOrder): string {
 Itens:
 ${itemsText}
 
-Total: R$ ${fmt(order.total)}
+${(order.deliveryFee ?? 0) > 0
+    ? `Taxa de entrega: R$ ${fmt(order.deliveryFee ?? 0)}\n`
+    : ""}Total: R$ ${fmt(order.total)}
 Forma de pagamento: ${paymentText}
 ${typeLine}
 

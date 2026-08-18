@@ -80,7 +80,7 @@ export class OrdersService {
     if (resolved.length === 0) return "Não foi possível encontrar os produtos solicitados.";
 
     session.order.items = resolved;
-    this.recalculateTotal(session);
+    await this.recalculateTotal(session);
     await SessionService.saveSession(session);
 
     if (session.activeOrderId) {
@@ -88,6 +88,7 @@ export class OrdersService {
         where: { id: session.activeOrderId },
         data: {
           total: session.order.total,
+          deliveryFee: session.order.deliveryFee,
           items: {
             deleteMany: {},
             create: session.order.items.map(item => ({
@@ -117,10 +118,12 @@ export class OrdersService {
       : "Não foi possível encontrar os produtos solicitados.";
   }
 
-  static recalculateTotal(session: BotSession) {
+  static async recalculateTotal(session: BotSession) {
     const itemsTotal = session.order.items.reduce((acc, item) => acc + (item.price * item.quantity), 0);
-    // Add delivery fee logic here if needed (e.g. static or calculated)
-    session.order.deliveryFee = 0;
+    const fee = session.orderType === "PICKUP"
+      ? 0
+      : (await prisma.tenant.findUnique({ where: { id: session.tenantId }, select: { deliveryFee: true } }))?.deliveryFee ?? 0;
+    session.order.deliveryFee = fee;
     session.order.total = itemsTotal + session.order.deliveryFee;
   }
 
@@ -146,6 +149,8 @@ export class OrdersService {
           deliveryAddress: session.orderType === "PICKUP"
             ? Prisma.DbNull
             : { fullAddress: session.customer.address },
+          total: session.order.total,
+          deliveryFee: session.order.deliveryFee,
           notes: session.payment,
         },
       });
@@ -166,6 +171,7 @@ export class OrdersService {
         source: "WHATSAPP",
         status: "CONFIRMED",
         total: session.order.total,
+        deliveryFee: session.order.deliveryFee,
         deliveryAddress: session.orderType === "PICKUP"
           ? Prisma.DbNull
           : { fullAddress: session.customer.address },

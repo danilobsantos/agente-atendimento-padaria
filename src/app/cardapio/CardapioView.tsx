@@ -44,6 +44,7 @@ interface CardapioViewProps {
   tenantId: string;
   tenantName: string;
   tenantLogoUrl?: string | null;
+  deliveryFee?: number;
   categories: Category[];
   products: Product[];
   additionalItems: AdditionalItem[];
@@ -53,6 +54,7 @@ export default function CardapioView({
   tenantId,
   tenantName,
   tenantLogoUrl,
+  deliveryFee = 0,
   categories,
   products,
   additionalItems,
@@ -106,6 +108,9 @@ export default function CardapioView({
     (sum, item) => sum + unitPrice(item) * item.quantity,
     0
   );
+
+  const deliveryFeeValue = orderType === "DELIVERY" ? deliveryFee : 0;
+  const checkoutTotal = cartTotal + deliveryFeeValue;
 
   const addToCart = (product: Product, extras: CartExtra[]) => {
     const key = `${product.id}:${extras.map((e) => e.id).sort().join(",")}`;
@@ -635,10 +640,22 @@ export default function CardapioView({
               </div>
 
               {/* Order total info */}
+              {deliveryFeeValue > 0 && (
+                <div className="border-t border-[#EBE2D5] pt-4 flex justify-between items-center text-[#6B5A4B] text-sm">
+                  <span>Subtotal</span>
+                  <span className="font-semibold">R$ {cartTotal.toFixed(2)}</span>
+                </div>
+              )}
+              {deliveryFeeValue > 0 && (
+                <div className="flex justify-between items-center text-[#6B5A4B] text-sm">
+                  <span>Taxa de entrega</span>
+                  <span className="font-semibold">R$ {deliveryFeeValue.toFixed(2)}</span>
+                </div>
+              )}
               <div className="border-t border-[#EBE2D5] pt-4 flex justify-between items-center">
                 <span className="font-bold text-amber-950 font-serif">Total a Pagar</span>
                 <span className="font-extrabold text-amber-700 text-2xl">
-                  R$ {cartTotal.toFixed(2)}
+                  R$ {checkoutTotal.toFixed(2)}
                 </span>
               </div>
 

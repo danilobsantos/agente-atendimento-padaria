@@ -35,6 +35,7 @@ interface Order {
   status: "PENDING" | "CONFIRMED" | "PREPARING" | "DISPATCHED" | "DELIVERED" | "CANCELLED";
   source: "WHATSAPP" | "WEB";
   total: number;
+  deliveryFee?: number;
   deliveryAddress: {
     fullAddress?: string;
     street?: string;
@@ -565,6 +566,12 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
                   </div>
                 ))}
 
+                {(selectedOrderDetails.deliveryFee ?? 0) > 0 && (
+                  <div className="flex justify-between items-center text-[#6B5A4B] text-sm pt-1.5">
+                    <span>Taxa de entrega</span>
+                    <span className="font-semibold">R$ {(selectedOrderDetails.deliveryFee ?? 0).toFixed(2)}</span>
+                  </div>
+                )}
                 <div className="pt-2.5 border-t border-[#EBE2D5] flex justify-between items-center font-extrabold text-amber-950 text-sm">
                   <span>Valor Total</span>
                   <span className="text-base text-amber-700">R$ {selectedOrderDetails.total.toFixed(2)}</span>

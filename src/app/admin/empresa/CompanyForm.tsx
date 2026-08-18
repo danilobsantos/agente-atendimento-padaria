@@ -10,6 +10,7 @@ export interface Company {
   address: string | null;
   phone: string | null;
   logoUrl: string | null;
+  deliveryFee: number;
 }
 
 export default function CompanyForm({ company }: { company: Company }) {
@@ -17,6 +18,9 @@ export default function CompanyForm({ company }: { company: Company }) {
   const [cnpj, setCnpj] = useState(company.cnpj || "");
   const [address, setAddress] = useState(company.address || "");
   const [phone, setPhone] = useState(company.phone || "");
+  const [deliveryFee, setDeliveryFee] = useState(
+    company.deliveryFee > 0 ? String(company.deliveryFee).replace(".", ",") : ""
+  );
   const [logoUrl, setLogoUrl] = useState<string | null>(company.logoUrl);
   const [logoPreview, setLogoPreview] = useState<string | null>(null);
   const [logoFile, setLogoFile] = useState<File | null>(null);
@@ -47,6 +51,7 @@ export default function CompanyForm({ company }: { company: Company }) {
       formData.set("cnpj", cnpj);
       formData.set("address", address);
       formData.set("phone", phone);
+      formData.set("deliveryFee", deliveryFee);
       if (logoFile) formData.set("logo", logoFile);
 
       const res = await fetch("/api/company-settings", {
@@ -61,6 +66,7 @@ export default function CompanyForm({ company }: { company: Company }) {
         setLogoFile(null);
         setLogoPreview(null);
         setLogoUrl(data.logoUrl);
+        setDeliveryFee(data.deliveryFee > 0 ? String(data.deliveryFee).replace(".", ",") : "");
       } else {
         setStatus({ type: "error", message: data.error || "Ocorreu um erro ao salvar." });
       }
@@ -185,6 +191,22 @@ export default function CompanyForm({ company }: { company: Company }) {
             placeholder="Rua, número, bairro, cidade - UF"
             className={inputClass}
           />
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="text-[11px] font-bold text-[#6B5A4B] uppercase tracking-wider block">
+            Taxa de Entrega (R$)
+          </label>
+          <input
+            value={deliveryFee}
+            onChange={(e) => setDeliveryFee(e.target.value)}
+            placeholder="0,00"
+            inputMode="decimal"
+            className={inputClass}
+          />
+          <p className="text-xs text-[#8C7A6B]">
+            Somada automaticamente aos pedidos de delivery (web e WhatsApp). Deixe vazio para não cobrar.
+          </p>
         </div>
       </div>
 
