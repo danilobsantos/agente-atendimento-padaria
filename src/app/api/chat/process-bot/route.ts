@@ -19,6 +19,16 @@ export interface BotRouteDeps {
   params?: unknown;
 }
 
+// LLM-driven finalization guard: mirror the IntentRouter's explicit-confirm
+// words so a drift (LLM asks for confirmation but labels intent confirmar_pedido)
+// can't ship the order before the customer actually confirms.
+function isExplicitConfirmation(rawMessage: string): boolean {
+  const text = rawMessage.trim().toLowerCase();
+  if (/\bn(ao)?o\b/.test(text)) return false;
+  if (text === "sim" || text === "ok" || text === "pode") return true;
+  return /\b(confirmar|confirmo|pode mandar|pode ser|pode confirmar|t[áa] certo|manda ver|isso mesmo)\b/.test(text);
+}
+
 export async function POST(request: Request, deps: BotRouteDeps = {}) {
   try {
     const { customerId, message } = await request.json();
@@ -193,7 +203,11 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
       }
 
       // 3. Handle specific intents
-      if (agentResponse.intent === "confirmar_pedido") {
+      if (agentResponse.intent === "confirmar_pedido" && !isExplicitConfirmation(fullMessage)) {
+        // LLM drifted: asked for confirmation but labeled the intent confirmar_pedido.
+        // Send the summary/question as-is; do NOT finalize the order.
+        console.warn("[Bot Process] Intent confirmar_pedido sem confirmação explícita — pedido não finalizado.");
+      } else if (agentResponse.intent === "confirmar_pedido") {
         try {
           const orderId = await OrdersService.finalizeOrder(session);
           session.state = BotState.START;

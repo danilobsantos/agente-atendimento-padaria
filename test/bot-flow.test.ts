@@ -265,6 +265,36 @@ test("retirada no balcão não exige endereço", async () => {
   assert.equal(order.items.length, 2);
 });
 
+// LLM drift: devolve "confirmar_pedido" enquanto PEDE confirmação. O pedido NÃO
+// pode ser finalizado antes do cliente confirmar explicitamente.
+test("intent confirmar_pedido sem confirmação explícita não finaliza o pedido", async () => {
+  await runTurn("retirada", canned("generico", { orderType: "PICKUP" }));
+  await runTurn(
+    "1 tapioca e 1 detox",
+    canned("adicionar_itens", { products: [qty(P_TAPIOCA), qty(P_DETOX)] }),
+  );
+
+  // Drift: mensagem é um NOME, mas o LLM marca confirmar_pedido e pede confirmação.
+  const res = await runTurn(
+    "Danilo Santos",
+    canned("confirmar_pedido", {
+      message: "Podemos confirmar o pedido?",
+      customerInfo: { name: "Danilo Santos", address: "", payment: "Pix" },
+    }),
+  );
+  const body = await res.json();
+  assert.equal(res.status, 200);
+  assert.equal(body.status, "success");
+  assert.match(body.response, /Podemos confirmar o pedido\?/);
+  assert.doesNotMatch(body.response, /\(Pedido/i);
+  assert.equal(await prisma.order.count({ where: { customerId: CUSTOMER_ID } }), 0);
+
+  // Confirmação explícita depois → finaliza normalmente.
+  await runTurn("sim", canned("confirmar_pedido"));
+  const order = await prisma.order.findFirstOrThrow({ where: { customerId: CUSTOMER_ID } });
+  assert.equal(order.status, "CONFIRMED");
+});
+
 // Produto inexistente: não lança erro e não cria pedido.
 test("produto inexistente é ignorado sem criar pedido", async () => {
   const res = await runTurn(
