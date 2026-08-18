@@ -2,7 +2,7 @@ import { redisKey, redisPub as redis } from "@/lib/redis";
 
 export class MessageBuffer {
   // Add a message to the buffer and return true if this is the first message triggering processing
-  static async pushMessage(tenantId: string, customerId: string, message: string): Promise<boolean> {
+  static async pushMessage(tenantId: string, customerId: string, message: string, lockTtlSeconds = 3): Promise<boolean> {
     const listKey = redisKey("buffer", "msgs", tenantId, customerId);
     const lockKey = redisKey("buffer", "lock", tenantId, customerId);
 
@@ -16,7 +16,8 @@ export class MessageBuffer {
     const acquired = await redis.setnx(lockKey, "1");
     if (acquired) {
       // Lock acquired, set a short timeout as debounce window
-      await redis.expire(lockKey, 3); // 3 seconds debounce/lock
+      // ponytail: TTL must outlive the debounce wait + processing; releaseLock clears it on normal exit
+      await redis.expire(lockKey, lockTtlSeconds);
       return true;
     }
     

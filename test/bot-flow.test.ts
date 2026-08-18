@@ -277,3 +277,23 @@ test("produto inexistente é ignorado sem criar pedido", async () => {
   const orders = await prisma.order.count({ where: { customerId: CUSTOMER_ID } });
   assert.equal(orders, 0);
 });
+
+// A rota usa o debounceSeconds salvo no botSetting (não 2s fixo) quando
+// deps.debounceMs não é injetado.
+test("debounce usa botSetting.debounceSeconds quando deps.debounceMs é omitido", async () => {
+  await prisma.botSetting.update({
+    where: { tenantId: TENANT_ID },
+    data: { debounceSeconds: 1 },
+  });
+
+  const start = Date.now();
+  const res = await POST(req("boa noite"), {
+    llmService: fakeLLM([canned("generico")]),
+    send: noopSend,
+  });
+  const elapsed = Date.now() - start;
+
+  assert.equal(res.status, 200);
+  assert.ok(elapsed >= 800, `esperava aguardar ~1s (debounce=1), levou ${elapsed}ms`);
+  assert.ok(elapsed < 1900, `nenhum lock/debounce longo: levou ${elapsed}ms`);
+});

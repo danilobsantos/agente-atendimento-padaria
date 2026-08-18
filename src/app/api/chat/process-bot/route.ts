@@ -48,13 +48,15 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
     // 1. Debounce / Message Buffer
     // This prevents multiple LLM calls if the user sends 3 fast messages. 
     // It locks and queues them, then the single locked process consumes the queue.
-    const isFirst = await MessageBuffer.pushMessage(customer.tenantId, customerId, message);
+    const debounceSeconds = botSetting.debounceSeconds ?? 2;
+    // Lock TTL must outlive the debounce wait + processing (releaseLock clears it on normal exit)
+    const isFirst = await MessageBuffer.pushMessage(customer.tenantId, customerId, message, Math.max(3, debounceSeconds + 15));
     if (!isFirst) {
       return NextResponse.json({ status: "queued", reason: "debounce_active" });
     }
 
     // Wait a brief moment to allow rapid subsequent messages to queue up
-    await new Promise((resolve) => setTimeout(resolve, deps.debounceMs ?? 2000));
+    await new Promise((resolve) => setTimeout(resolve, deps.debounceMs ?? debounceSeconds * 1000));
 
     // Consume all messages that arrived during the debounce window
     const queuedMessages = await MessageBuffer.consumeMessages(customer.tenantId, customerId);
