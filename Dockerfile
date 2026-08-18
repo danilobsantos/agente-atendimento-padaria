@@ -2,7 +2,14 @@
 
 # Both production services share this image. Docker Compose selects the process
 # to run: Next.js for `web` and Socket.IO for `websocket`.
-FROM node:22-bookworm-slim AS dependencies
+FROM node:22-bookworm-slim AS base
+
+# Prisma needs the OpenSSL command and libraries to select its runtime engine.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends openssl \
+  && rm -rf /var/lib/apt/lists/*
+
+FROM base AS dependencies
 WORKDIR /app
 
 COPY package.json package-lock.json ./
@@ -28,7 +35,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN npm run build
 
-FROM node:22-bookworm-slim AS runner
+FROM base AS runner
 WORKDIR /app
 
 ENV NODE_ENV=production
