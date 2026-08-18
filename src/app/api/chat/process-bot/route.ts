@@ -108,7 +108,10 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
       const cartDescription = session.order.items
         .map((it) => {
           const short = uuidToShort.get(it.productId) ?? "?";
-          return `${short}. ${it.name} x${it.quantity}${it.notes ? ` (${it.notes})` : ""}`;
+          const extras = it.additionalItems && it.additionalItems.length > 0
+            ? ` | adicionais: ${it.additionalItems.map(a => `${a.name}(+R$${a.price.toFixed(2)})`).join(", ")}`
+            : "";
+          return `${short}. ${it.name} x${it.quantity}${it.notes ? ` (${it.notes})` : ""}${extras}`;
         })
         .join("\n");
 

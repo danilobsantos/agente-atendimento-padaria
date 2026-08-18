@@ -34,7 +34,19 @@ const RESPONSE_JSON_SCHEMA = {
       type: "array",
       items: {
         type: "object",
-        properties: { id: { type: "string" }, quantity: { type: "number" }, notes: { type: "string" } },
+        properties: {
+          id: { type: "string" },
+          quantity: { type: "number" },
+          notes: { type: "string" },
+          additionalItems: {
+            type: "array",
+            items: {
+              type: "object",
+              properties: { id: { type: "string" }, name: { type: "string" }, price: { type: "number" } },
+              required: ["id", "name"],
+            },
+          },
+        },
         required: ["id", "quantity"],
       },
     },
@@ -54,7 +66,12 @@ export const AgentResponseSchema = z.object({
   products: z.array(z.object({
     id: z.string(),
     quantity: z.number(),
-    notes: z.string().optional()
+    notes: z.string().optional(),
+    additionalItems: z.array(z.object({
+      id: z.string(),
+      name: z.string(),
+      price: z.number().optional(),
+    })).optional(), // ponytail: price é opcional; a rota resolve o preço autoritativo no banco
   })).optional(),
   message: z.string().describe("A mensagem de texto que será enviada para o usuário")
 });
@@ -110,6 +127,8 @@ RULES:
 8. TOOL "consultar_cardapio": ALWAYS call this tool to look up product names, variations, extras (complementos) and prices BEFORE setting "products" or answering doubts about the menu. NEVER invent product names, prices, or IDs. Only use the short IDs returned by the tool OR shown in the 'Cart' section below. The tool is for YOUR OWN research: answer specific doubts briefly (ex: "quanto custa o pão de queijo?" → "R$ 5,00"), but NEVER enumerate products in the conversation.
 9. NEVER list menu items in the "message". If the customer asks to SEE the menu, categories, or products (ex: "qual o cardápio?", "o que vocês têm?", "quais pães vocês têm?", "quero fazer um pedido"), the "message" must ONLY contain the web menu link "${menuUrl}/cardapio" and an invitation to order there (e.g. "Dá para escolher tudo por lá! Comece por aqui: ${menuUrl}/cardapio 😊"). Do NOT list items in these cases. Use the tool only to answer specific doubts (price/ingredients of ONE product) — and even then, do not enumerate multiple items.
 10. NO MID-CONVERSATION ITEM CONFIRMATION: Do NOT enumerate added items, quantities, or running subtotals/totals in mid-flow responses (ex: no "Adicionei 1x pão", no "Anotei", no "Total atual: R$ X"). When items are added, just continue the conversation and ask the next missing detail (size/extra variation, name, address, or payment). The ONLY place the full order (items, quantities, total, address, payment) is listed is the FINAL confirmation summary when the customer has provided all checkout info and you ask to confirm.
+12. NEVER INVENT ITEMS: the "products" array must contain ONLY products the customer EXPLICITLY named (each one exactly once, with the right quantity). A "consultar_cardapio" search returns SEVERAL similar products — include ONLY the one that matches what the customer said. NEVER turn extra search results, complements, or "sugestões" into line items, and NEVER add a product just because the tool returned it. Complements/adicionais the customer asks for (ex: "adicional de nutella") are NOT products: put them in "additionalItems" of the product they belong to (see rule 13), never as a new product.
+13. STRUCTURED OPTIONS: put every choice (size, variation, complemento/adicional) into the product's "notes" and/or "additionalItems" — NEVER describe an item choice only in "message". For an adicional that appears in the product's Complementos list, use "additionalItems": [{"id":"<id from the tool>","name":"<name>"}] on that same product (the price is resolved server-side, so you may omit it). When ECHOING existing cart items, reproduce their "notes" and "additionalItems" EXACTLY as shown in the Cart section — never move, merge, or drop options between items.
 ${session.activeOrderId ? `11. CONTEXTO: O cliente já tem um pedido ativo sendo preparado. Se ele pedir novos itens, adicione usando a intent 'adicionar_itens'.` : ""}
 Tipo do pedido: ${session.orderType === "PICKUP" ? "PICKUP (retirada - não precisa de endereço)" : session.orderType === "DELIVERY" ? "DELIVERY (entrega - precisa de endereço)" : session.orderType === "ENCOMENDA" ? "ENCOMENDA (encaminhar para atendente)" : "AINDA NÃO DEFINIDO — pergunte: entrega, retirada no balcão ou encomenda?"}
 Cart:
@@ -239,7 +258,7 @@ Payment: ${session.payment || "Not provided"}`;
 
     const lines = products.map((p) => {
       const extrasText = p.extras.length > 0
-        ? ` | Complementos: ${p.extras.map(e => `${e.name}(+R$${e.price.toFixed(2)})`).join(", ")}`
+        ? ` | Complementos: ${p.extras.map(e => `${e.name}(+R$${e.price.toFixed(2)})[id:${e.id}]`).join(", ")}`
         : "";
       return `${p.shortId}.${p.name} R$${p.price.toFixed(2)}${extrasText}`;
     });

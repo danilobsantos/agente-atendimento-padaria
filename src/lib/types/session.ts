@@ -10,12 +10,19 @@ export enum BotState {
   CANCELLED = "CANCELLED",
 }
 
+export interface OrderItemAdditionalState {
+  id: string;
+  name: string;
+  price: number;
+}
+
 export interface OrderItemState {
   productId: string;
   quantity: number;
   price: number;
   name: string; // Stored for display without querying DB
   notes?: string;
+  additionalItems?: OrderItemAdditionalState[];
 }
 
 export interface CustomerState {

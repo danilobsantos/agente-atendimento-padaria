@@ -14,6 +14,7 @@ const PHONE = "5511988887777";
 const P_TAPIOCA = "00000000-0000-0000-0000-000000000001";
 const P_DETOX = "00000000-0000-0000-0000-000000000002";
 const P_OMELETE = "00000000-0000-0000-0000-000000000003";
+const EXTRA_NUTELLA = "00000000-0000-0000-0000-0000000000aa";
 
 const noopSend: BotRouteDeps["send"] = async () => {};
 
@@ -88,6 +89,9 @@ beforeEach(async () => {
       { id: P_DETOX, tenantId: TENANT_ID, name: "Detox laranja", price: 16 },
       { id: P_OMELETE, tenantId: TENANT_ID, name: "Omelete completo", price: 18 },
     ],
+  });
+  await prisma.additionalItem.create({
+    data: { id: EXTRA_NUTELLA, tenantId: TENANT_ID, name: "Nutella", price: 2, isAvailable: true },
   });
   await prisma.customer.create({
     data: { id: CUSTOMER_ID, tenantId: TENANT_ID, phone: PHONE },
@@ -293,6 +297,41 @@ test("intent confirmar_pedido sem confirmação explícita não finaliza o pedid
   await runTurn("sim", canned("confirmar_pedido"));
   const order = await prisma.order.findFirstOrThrow({ where: { customerId: CUSTOMER_ID } });
   assert.equal(order.status, "CONFIRMED");
+});
+
+// Complementos (adicionais) entram precificados no pedido e o eco do carrinho
+// sem "additionalItems" não zera os complementos já escolhidos.
+test("adicionais precificados + eco preserva complementos existentes", async () => {
+  await runTurn("retirada", canned("generico", { orderType: "PICKUP" }));
+  await runTurn(
+    "1 tapioca e 1 detox",
+    canned("adicionar_itens", {
+      products: [
+        { ...qty(P_TAPIOCA), additionalItems: [{ id: EXTRA_NUTELLA, name: "Nutella" }] },
+        qty(P_DETOX),
+      ],
+    }),
+  );
+
+  // Eco seguinte do carrinho SEM o additionalItems: o complemento deve permanecer.
+  await runTurn(
+    "só confirma o carrinho",
+    canned("adicionar_itens", { products: [qty(P_TAPIOCA), qty(P_DETOX)] }),
+  );
+
+  await runTurn("Danilo Santos", canned("generico", { customerInfo: { name: "Danilo Santos", address: "", payment: "" } }));
+  await runTurn("Pix", canned("generico", { customerInfo: { name: "", address: "", payment: "Pix" } }));
+  await runTurn("sim", canned("confirmar_pedido"));
+
+  const order = await prisma.order.findFirstOrThrow({
+    where: { customerId: CUSTOMER_ID },
+    include: { items: true },
+  });
+  assert.equal(order.status, "CONFIRMED");
+  const tapioca = order.items.find(i => i.productId === P_TAPIOCA)!;
+  assert.equal(tapioca.price, 18.9 + 2);
+  assert.deepEqual(tapioca.additionalItems, [{ id: EXTRA_NUTELLA, name: "Nutella", price: 2 }]);
+  assert.equal(order.total, 18.9 + 2 + 16);
 });
 
 // Produto inexistente: não lança erro e não cria pedido.

@@ -1,37 +1,78 @@
 import { prisma } from "@/lib/prisma";
 import { Prisma } from "@/generated/prisma/client";
-import { BotSession, OrderItemState } from "../types/session";
+import { BotSession, OrderItemState, OrderItemAdditionalState } from "../types/session";
 import { ProductsService } from "./products.service";
 import { SessionService } from "./session.service";
 import { redisChannel, redisPub } from "@/lib/redis";
 
+type IncomingAdditional = { id?: string; name?: string; price?: number };
+
 export class OrdersService {
-  static async updateOrderItems(session: BotSession, newItems: { id: string, quantity: number, notes?: string }[]): Promise<string> {
+  // Resolve complementos against the catalog (authoritative id/price), matching the
+  // web flow. Falls back to name so a UUID mangled by the LLM can still match.
+  private static async resolveAdditionalItems(
+    tenantId: string,
+    incoming: IncomingAdditional[]
+  ): Promise<OrderItemAdditionalState[]> {
+    const locals = incoming.filter(a => a && (a.id || a.name));
+    if (locals.length === 0) return [];
+
+    const all = await prisma.additionalItem.findMany({ where: { tenantId, isAvailable: true } });
+    const byId = new Map(all.map(e => [e.id, e]));
+    const byName = new Map(all.map(e => [e.name.trim().toLowerCase(), e]));
+
+    return locals.flatMap((a) => {
+      const db = a.id
+        ? byId.get(a.id)
+        : undefined;
+      const match = db ?? (a.name ? byName.get(a.name.trim().toLowerCase()) : undefined);
+      if (!match) return [];
+      return [{
+        id: match.id,
+        name: match.name,
+        price: match.price,
+      }];
+    });
+  }
+
+  static async updateOrderItems(
+    session: BotSession,
+    newItems: { id: string, quantity: number, notes?: string, additionalItems?: IncomingAdditional[] }[]
+  ): Promise<string> {
     if (newItems.length === 0) return "Nenhum item válido para adicionar.";
 
     // Release a stale active order (DISPATCHED/READY/DELIVERED/CANCELLED) so items
     // land in a fresh cart instead of mutating a finished order.
     await SessionService.releaseStaleActiveOrder(session);
 
+    // Resolve complements once for the whole batch
+    const extraByItem = await Promise.all(
+      newItems.map(i => OrdersService.resolveAdditionalItems(session.tenantId, i.additionalItems || []))
+    );
+
     // products = the AUTHORITATIVE full cart (per prompt rule 1); REPLACE, not accumulate.
     const resolved: OrderItemState[] = [];
     const addedDescriptions: string[] = [];
 
-    for (const newItem of newItems) {
+    for (let i = 0; i < newItems.length; i++) {
+      const newItem = newItems[i];
       const product = await ProductsService.getProductById(session.tenantId, newItem.id);
       if (!product) continue;
 
       const qty = Math.max(1, newItem.quantity || 1);
       const existing = session.order.items.find(i => i.productId === product.id);
-      // ponytail: keep notes the LLM didn't re-send so chosen add-ons (e.g. "GRANDE") aren't dropped
+      // ponytail: keep notes/extras the LLM didn't re-send so chosen options aren't dropped
       const notes = newItem.notes ?? existing?.notes;
+      const additionalItems = extraByItem[i].length > 0 ? extraByItem[i] : existing?.additionalItems;
+      const extrasTotal = (additionalItems ?? []).reduce((sum, a) => sum + a.price, 0);
 
       resolved.push({
         productId: product.id,
         name: product.name,
-        price: product.price,
+        price: product.price + extrasTotal,
         quantity: qty,
         notes,
+        ...(additionalItems !== undefined && { additionalItems }),
       });
       addedDescriptions.push(`${qty}x ${product.name}`);
     }
@@ -54,6 +95,7 @@ export class OrdersService {
               quantity: item.quantity,
               price: item.price,
               notes: item.notes,
+              ...(item.additionalItems !== undefined && { additionalItems: item.additionalItems as unknown as Prisma.InputJsonValue }),
             })),
           },
         },
@@ -134,6 +176,7 @@ export class OrdersService {
             quantity: item.quantity,
             price: item.price,
             notes: item.notes,
+            ...(item.additionalItems !== undefined && { additionalItems: item.additionalItems as unknown as Prisma.InputJsonValue }),
           }))
         }
       },
