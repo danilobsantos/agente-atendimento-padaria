@@ -30,13 +30,19 @@ async function clean() {
     console.error("❌ Erro ao limpar PostgreSQL:", dbError);
   }
 
-  // 2. Limpeza do Redis
+  // 2. Limpeza do Redis (apenas chaves com o prefixo da aplicação)
   const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
+  const redisPrefix = (process.env.REDIS_PREFIX || "ag_delivery").replace(/:+$/, "");
   const redis = new Redis(redisUrl);
 
   try {
-    await redis.flushall();
-    console.log("✅ Redis limpo (FLUSHALL concluído)");
+    const keys = await redis.keys(`${redisPrefix}:*`);
+    if (keys.length > 0) {
+      await redis.del(...keys);
+      console.log(`✅ Redis limpo (${keys.length} chaves excluídas sob namespace '${redisPrefix}:*')`);
+    } else {
+      console.log(`✅ Nenhuma chave encontrada sob namespace '${redisPrefix}:*'`);
+    }
     await redis.quit();
   } catch (redisError) {
     console.error("❌ Erro ao limpar Redis:", redisError);

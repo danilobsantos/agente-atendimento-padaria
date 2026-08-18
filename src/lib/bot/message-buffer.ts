@@ -1,10 +1,10 @@
-import { redisPub as redis } from "@/lib/redis";
+import { redisKey, redisPub as redis } from "@/lib/redis";
 
 export class MessageBuffer {
   // Add a message to the buffer and return true if this is the first message triggering processing
   static async pushMessage(tenantId: string, customerId: string, message: string): Promise<boolean> {
-    const listKey = `buffer:msgs:${tenantId}:${customerId}`;
-    const lockKey = `buffer:lock:${tenantId}:${customerId}`;
+    const listKey = redisKey("buffer", "msgs", tenantId, customerId);
+    const lockKey = redisKey("buffer", "lock", tenantId, customerId);
 
     // Push the new message to the list
     await redis.rpush(listKey, message);
@@ -25,7 +25,7 @@ export class MessageBuffer {
 
   // Get all accumulated messages and clear the buffer
   static async consumeMessages(tenantId: string, customerId: string): Promise<string[]> {
-    const listKey = `buffer:msgs:${tenantId}:${customerId}`;
+    const listKey = redisKey("buffer", "msgs", tenantId, customerId);
     
     // Get all elements
     const messages = await redis.lrange(listKey, 0, -1);
@@ -37,7 +37,8 @@ export class MessageBuffer {
   }
 
   static async releaseLock(tenantId: string, customerId: string): Promise<void> {
-    const lockKey = `buffer:lock:${tenantId}:${customerId}`;
+    const lockKey = redisKey("buffer", "lock", tenantId, customerId);
     await redis.del(lockKey);
   }
 }
+

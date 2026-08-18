@@ -1,4 +1,4 @@
-import { redisPub as redis } from "@/lib/redis";
+import { redisKey, redisPub as redis } from "@/lib/redis";
 import { BotSession, BotState } from "../types/session";
 import { prisma } from "@/lib/prisma";
 import { isOrderMutable } from "../utils/order-status";
@@ -13,7 +13,7 @@ export class SessionService {
   }
 
   private static getKey(tenantId: string, customerId: string): string {
-    return `session:${tenantId}:${customerId}`;
+    return redisKey("session", tenantId, customerId);
   }
 
   static async getSession(tenantId: string, customerId: string, phone: string, activeOrderId?: string): Promise<BotSession> {

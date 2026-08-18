@@ -89,9 +89,9 @@ export async function POST(request: Request) {
 
     if (customer) {
       // Publish event to Redis for WebSocket broadcast (message)
-      const { redisPub } = await import("@/lib/redis");
+      const { redisChannel, redisPub } = await import("@/lib/redis");
       await redisPub.publish(
-        `tenant:${customer.tenantId}:message`,
+        redisChannel("tenant", customer.tenantId, "message"),
         JSON.stringify({
           ...message,
           customerName: customer.name || customer.phone,
@@ -102,7 +102,7 @@ export async function POST(request: Request) {
 
       // Publish event to Redis for WebSocket broadcast (customer status)
       await redisPub.publish(
-        `tenant:${customer.tenantId}:customer`,
+        redisChannel("tenant", customer.tenantId, "customer"),
         JSON.stringify({
           customerId: customer.id,
           isHumanAttending: customer.isHumanAttending,

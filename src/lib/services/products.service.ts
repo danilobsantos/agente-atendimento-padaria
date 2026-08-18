@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { redisPub as redis } from "@/lib/redis";
+import { redisKey, redisPub as redis } from "@/lib/redis";
 
 export interface ProductSummary {
   id: string;
@@ -23,7 +23,7 @@ export interface SearchProduct extends ProductSummary {
 
 export class ProductsService {
   private static getCacheKey(tenantId: string): string {
-    return `cache:products:${tenantId}`;
+    return redisKey("cache", "products", tenantId);
   }
 
   static async getProducts(tenantId: string): Promise<ProductSummary[]> {

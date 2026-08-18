@@ -141,9 +141,9 @@ export async function POST(request: Request) {
     });
 
     // Publish order creation to Redis for real-time Kanban update
-    const { redisPub } = await import("@/lib/redis");
+    const { redisChannel, redisPub } = await import("@/lib/redis");
     await redisPub.publish(
-      `tenant:${tenantId}:order`,
+      redisChannel("tenant", tenantId, "order"),
       JSON.stringify({ orderId: order.id, status: order.status, event: "ORDER_CREATED" })
     );
 

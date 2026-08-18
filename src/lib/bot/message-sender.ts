@@ -1,6 +1,6 @@
 import { evolutionGo } from "../services/evolution-go";
 import { prisma } from "../prisma";
-import { redisPub } from "../redis";
+import { redisChannel, redisPub } from "../redis";
 
 const MAX_CHUNK_LENGTH = 800;
 const DELAY_BETWEEN_CHUNKS_MS = 1500;
@@ -98,7 +98,7 @@ export async function sendChunkedResponse(params: SendChunkedParams): Promise<vo
 
     // Broadcast to WebSocket
     await redisPub.publish(
-      `tenant:${tenantId}:message`,
+      redisChannel("tenant", tenantId, "message"),
       JSON.stringify({
         ...botMessage,
         customerName,

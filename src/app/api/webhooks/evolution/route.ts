@@ -88,9 +88,9 @@ export async function POST(request: Request) {
     });
 
     // Publish event to Redis for WebSocket broadcast
-    const { redisPub } = await import("@/lib/redis");
+    const { redisChannel, redisPub } = await import("@/lib/redis");
     await redisPub.publish(
-      `tenant:${tenant.id}:message`,
+      redisChannel("tenant", tenant.id, "message"),
       JSON.stringify({
         ...chatMessage,
         customerName: customer.name || customer.phone,

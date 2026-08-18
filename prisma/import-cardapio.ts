@@ -316,9 +316,10 @@ async function main() {
 
   // 5. Clear bot product cache so it does not serve stale items
   const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
+  const redisPrefix = (process.env.REDIS_PREFIX || "ag_delivery").replace(/:+$/, "");
   const redis = new Redis(redisUrl);
   try {
-    await redis.del(`cache:products:${tenant.id}`);
+    await redis.del(`${redisPrefix}:cache:products:${tenant.id}`);
     console.log("🗑️  Cache Redis de produtos limpo");
   } finally {
     redis.quit();

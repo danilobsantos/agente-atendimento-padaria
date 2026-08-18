@@ -3,7 +3,7 @@ import { Prisma } from "@/generated/prisma/client";
 import { BotSession, OrderItemState } from "../types/session";
 import { ProductsService } from "./products.service";
 import { SessionService } from "./session.service";
-import { redisPub } from "@/lib/redis";
+import { redisChannel, redisPub } from "@/lib/redis";
 
 export class OrdersService {
   static async updateOrderItems(session: BotSession, newItems: { id: string, quantity: number, notes?: string }[]): Promise<string> {
@@ -65,7 +65,7 @@ export class OrdersService {
         select: { status: true },
       });
       await redisPub.publish(
-        `tenant:${session.tenantId}:order`,
+        redisChannel("tenant", session.tenantId, "order"),
         JSON.stringify({ orderId: session.activeOrderId, status: activeOrder?.status, event: "ORDER_UPDATED" })
       );
     }
@@ -109,7 +109,7 @@ export class OrdersService {
       });
 
       await redisPub.publish(
-        `tenant:${session.tenantId}:order`,
+        redisChannel("tenant", session.tenantId, "order"),
         JSON.stringify({ orderId: session.activeOrderId, status: "CONFIRMED", event: "ORDER_UPDATED" })
       );
 
@@ -147,7 +147,7 @@ export class OrdersService {
 
     // Notify Dashboard
     await redisPub.publish(
-      `tenant:${session.tenantId}:order`,
+      redisChannel("tenant", session.tenantId, "order"),
       JSON.stringify({ orderId: order.id, status: order.status, event: "ORDER_CREATED" })
     );
 

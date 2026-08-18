@@ -2,7 +2,7 @@ import "dotenv/config";
 import { after, beforeEach, afterEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { prisma } from "../src/lib/prisma";
-import { redisPub, redisSub } from "../src/lib/redis";
+import { redisKey, redisPub, redisSub } from "../src/lib/redis";
 import { POST, type BotRouteDeps } from "../src/app/api/chat/process-bot/route";
 import type { AgentResponse } from "../src/lib/bot/llm-agent";
 import type { LLMResponse } from "../src/lib/types/llm";
@@ -97,9 +97,9 @@ beforeEach(async () => {
 afterEach(async () => {
   await cleanTenantData();
   await redisPub.del(
-    `session:${TENANT_ID}:${CUSTOMER_ID}`,
-    `buffer:msgs:${TENANT_ID}:${CUSTOMER_ID}`,
-    `buffer:lock:${TENANT_ID}:${CUSTOMER_ID}`,
+    redisKey("session", TENANT_ID, CUSTOMER_ID),
+    redisKey("buffer", "msgs", TENANT_ID, CUSTOMER_ID),
+    redisKey("buffer", "lock", TENANT_ID, CUSTOMER_ID),
   );
 });
 
@@ -191,7 +191,7 @@ test("sessão com activeOrderId órfão segue sem erro e cria pedido limpo", asy
     activeOrderId: "99999999-9999-9999-9999-999999999999",
     context: [],
   };
-  await redisPub.set(`session:${TENANT_ID}:${CUSTOMER_ID}`, JSON.stringify(session));
+  await redisPub.set(redisKey("session", TENANT_ID, CUSTOMER_ID), JSON.stringify(session));
 
   await runTurn("quero 1 tapioca", canned("adicionar_itens", { products: [qty(P_TAPIOCA)] }));
   await runTurn("sim", canned("confirmar_pedido"));

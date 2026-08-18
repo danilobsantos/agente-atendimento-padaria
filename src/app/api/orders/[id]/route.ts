@@ -120,9 +120,9 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     }
 
     // Publish order update to Redis (for Kanban board update)
-    const { redisPub } = await import("@/lib/redis");
+    const { redisChannel, redisPub } = await import("@/lib/redis");
     await redisPub.publish(
-      `tenant:${order.tenantId}:order`,
+      redisChannel("tenant", order.tenantId, "order"),
       JSON.stringify({ orderId: order.id, status: order.status, event: "ORDER_STATUS_UPDATED" })
     );
 

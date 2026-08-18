@@ -8,6 +8,7 @@ import { Pool } from "pg";
 
 const PORT = parseInt(process.env.PORT || "3001");
 const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
+const redisPrefix = (process.env.REDIS_PREFIX || "ag_delivery").replace(/:+$/, "");
 const nextAppUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
@@ -28,9 +29,9 @@ const io = new Server(httpServer, {
 
 const redisSub = new Redis(redisUrl);
 
-// Subscribe to all tenant-related channels
-redisSub.psubscribe("tenant:*:*").then(() => {
-  console.log("🔊 WebSockets subscribed to Redis channels matching 'tenant:*:*'");
+// Subscribe to all tenant-related channels with application namespace
+redisSub.psubscribe(`${redisPrefix}:tenant:*:*`).then(() => {
+  console.log(`🔊 WebSockets subscribed to Redis channels matching '${redisPrefix}:tenant:*:*'`);
 }).catch((err) => {
   console.error("❌ Redis subscription error:", err);
 });
@@ -38,10 +39,16 @@ redisSub.psubscribe("tenant:*:*").then(() => {
 redisSub.on("pmessage", async (pattern, channel, message) => {
   try {
     const parts = channel.split(":");
-    if (parts.length < 3) return;
+    if (
+      parts.length < 4 ||
+      parts[0] !== redisPrefix ||
+      parts[1] !== "tenant"
+    ) {
+      return;
+    }
 
-    const tenantId = parts[1];
-    const eventType = parts[2];
+    const tenantId = parts[2];
+    const eventType = parts[3];
     const data = JSON.parse(message);
 
     console.log(`[Redis Event] Tenant: ${tenantId} | Event: ${eventType}`);

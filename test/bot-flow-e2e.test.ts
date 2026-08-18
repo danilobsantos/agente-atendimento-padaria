@@ -3,7 +3,7 @@ import { after, beforeEach, afterEach, test } from "node:test";
 import assert from "node:assert/strict";
 import { mkdir, writeFile } from "node:fs/promises";
 import { prisma } from "../src/lib/prisma";
-import { redisPub, redisSub } from "../src/lib/redis";
+import { redisKey, redisPub, redisSub } from "../src/lib/redis";
 import { POST } from "../src/app/api/chat/process-bot/route";
 import { createLLMService } from "../src/lib/adapters/factory";
 import { ProductsService } from "../src/lib/services/products.service";
@@ -189,9 +189,9 @@ beforeEach(async () => {
 afterEach(async () => {
   await cleanTestCustomer();
   await redisPub.del(
-    `session:${TENANT_ID}:${CUSTOMER_ID}`,
-    `buffer:msgs:${TENANT_ID}:${CUSTOMER_ID}`,
-    `buffer:lock:${TENANT_ID}:${CUSTOMER_ID}`,
+    redisKey("session", TENANT_ID, CUSTOMER_ID),
+    redisKey("buffer", "msgs", TENANT_ID, CUSTOMER_ID),
+    redisKey("buffer", "lock", TENANT_ID, CUSTOMER_ID),
   );
 });
 

@@ -134,15 +134,15 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
           where: { id: customer.id },
           data: { isHumanAttending: true },
         });
-        const { redisPub } = await import("@/lib/redis");
+        const { redisChannel, redisPub } = await import("@/lib/redis");
         await redisPub.publish(
-          `tenant:${customer.tenantId}:customer`,
+          redisChannel("tenant", customer.tenantId, "customer"),
           JSON.stringify({ customerId: customer.id, isHumanAttending: true })
         );
         // Reinforce the sidebar badge, then alert staff via a PANEL TOAST (a
         // dedicated "notification" event), NOT a message in the customer chat.
         await redisPub.publish(
-          `tenant:${customer.tenantId}:notification`,
+          redisChannel("tenant", customer.tenantId, "notification"),
           JSON.stringify({
             type: "encomenda",
             customerId: customer.id,
@@ -218,9 +218,9 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
               where: { id: session.customerId },
               data: { activeOrderId: null }
             });
-            const { redisPub } = await import("@/lib/redis");
+            const { redisChannel, redisPub } = await import("@/lib/redis");
             await redisPub.publish(
-              `tenant:${session.tenantId}:order`,
+              redisChannel("tenant", session.tenantId, "order"),
               JSON.stringify({ orderId: session.activeOrderId, status: "CANCELLED", event: "ORDER_STATUS_UPDATED" })
             );
           }
