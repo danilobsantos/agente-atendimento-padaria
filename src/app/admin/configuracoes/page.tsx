@@ -1,11 +1,22 @@
 import { prisma } from "@/lib/prisma";
+import { getAuthUser } from "@/lib/utils/auth-route";
 import ConfigForm from "./ConfigForm";
 
 export const dynamic = "force-dynamic";
 
 export default async function SettingsPage() {
-  const tenant = await prisma.tenant.findFirst({
-    where: { active: true },
+  const user = await getAuthUser();
+
+  if (!user) {
+    return (
+      <div className="flex-1 flex items-center justify-center text-slate-400">
+        Não autorizado.
+      </div>
+    );
+  }
+
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: user.tenantId },
     include: { botSetting: true },
   });
 

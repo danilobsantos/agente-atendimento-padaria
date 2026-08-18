@@ -53,6 +53,7 @@ model BotSetting {
   messageContextLimit Int         @default(15) @map("message_context_limit")
   maxOutputTokens     Int         @default(4096) @map("max_output_tokens")
   temperature         Float       @default(0.7) @map("temperature")
+  thinkingConfig      String?     @map("thinking_config")
   isActive            Boolean     @default(true) @map("is_active")
 
   createdAt DateTime @default(now()) @map("created_at")

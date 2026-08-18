@@ -38,6 +38,7 @@ export interface LLMServiceConfig {
   model: string;
   maxOutputTokens?: number;
   temperature?: number;
+  thinkingConfig?: string;
   tools?: LLMTool[];
   responseSchema?: Record<string, unknown>;
 }

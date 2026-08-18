@@ -110,6 +110,7 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
           maxOutputTokens: botSetting.maxOutputTokens,
           messageContextLimit: botSetting.messageContextLimit,
           temperature: botSetting.temperature ?? 0.7,
+          ...(botSetting.thinkingConfig && { thinkingConfig: botSetting.thinkingConfig }),
           systemPrompt: botSetting.systemPrompt || "Você é um assistente virtual.",
           menuUrl,
           cartDescription,

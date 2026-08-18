@@ -68,6 +68,7 @@ export interface LLMAgentConfig {
   maxOutputTokens: number;
   messageContextLimit: number;
   temperature: number;
+  thinkingConfig?: string;
   systemPrompt: string;
   menuUrl: string;
   cartDescription: string;
@@ -130,6 +131,7 @@ Payment: ${session.payment || "Not provided"}`;
       model: config.model,
       maxOutputTokens: config.maxOutputTokens,
       temperature: config.temperature,
+      ...(config.thinkingConfig && { thinkingConfig: config.thinkingConfig }),
       responseSchema: RESPONSE_JSON_SCHEMA,
     };
 

@@ -40,6 +40,7 @@ export async function PUT(request: Request) {
       messageContextLimit,
       maxOutputTokens,
       temperature,
+      thinkingConfig,
       isActive,
     } = body;
 
@@ -59,6 +60,7 @@ export async function PUT(request: Request) {
         ...(messageContextLimit !== undefined && { messageContextLimit: parseInt(messageContextLimit) }),
         ...(maxOutputTokens !== undefined && { maxOutputTokens: parseInt(maxOutputTokens) }),
         ...(temperature !== undefined && { temperature: parseFloat(temperature) }),
+        ...(thinkingConfig !== undefined && { thinkingConfig: thinkingConfig ? String(thinkingConfig) : null }),
         ...(isActive !== undefined && { isActive }),
       },
       create: {
@@ -72,6 +74,7 @@ export async function PUT(request: Request) {
         messageContextLimit: messageContextLimit ? parseInt(messageContextLimit) : 15,
         maxOutputTokens: maxOutputTokens ? parseInt(maxOutputTokens) : 4096,
         temperature: temperature ? parseFloat(temperature) : 0.7,
+        ...(thinkingConfig !== undefined && { thinkingConfig: thinkingConfig ? String(thinkingConfig) : null }),
         isActive: isActive ?? true,
       },
     });

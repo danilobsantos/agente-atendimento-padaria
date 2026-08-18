@@ -14,6 +14,7 @@ interface Settings {
   messageContextLimit: number;
   maxOutputTokens: number;
   temperature: number;
+  thinkingConfig?: string | null;
   isActive: boolean;
 }
 
@@ -27,6 +28,7 @@ export default function ConfigForm({ initialSettings }: { initialSettings: Setti
   const [contextLimit, setContextLimit] = useState(initialSettings.messageContextLimit || 15);
   const [maxOutputTokens, setMaxOutputTokens] = useState(initialSettings.maxOutputTokens || 4096);
   const [temperature, setTemperature] = useState(initialSettings.temperature ?? 0.7);
+  const [thinkingConfig, setThinkingConfig] = useState(initialSettings.thinkingConfig || "");
   const [isActive, setIsActive] = useState(initialSettings.isActive);
 
   const [isSaving, setIsSaving] = useState(false);
@@ -38,7 +40,7 @@ export default function ConfigForm({ initialSettings }: { initialSettings: Setti
     if (val === "DEEPSEEK") {
       setModel("deepseek-v4-flash");
     } else if (val === "GEMINI") {
-      setModel("gemini-2.0-flash");
+      setModel("gemini-3.5-flash");
     }
   };
 
@@ -62,6 +64,7 @@ export default function ConfigForm({ initialSettings }: { initialSettings: Setti
           messageContextLimit: contextLimit,
           maxOutputTokens,
           temperature,
+          thinkingConfig,
           isActive,
         }),
       });
@@ -141,10 +144,9 @@ export default function ConfigForm({ initialSettings }: { initialSettings: Setti
                 className="w-full bg-[#FAF7F2] border border-[#EBE2D5] text-[#2E251B] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-600 cursor-pointer"
               >
                 <option value="gemini-3.5-flash">Gemini 3.5 Flash (Ultrarrápido)</option>
+                <option value="gemini-3.5-flash-lite">Gemini 3.5 Flash Lite</option>
+                <option value="gemini-3.6-flash">Gemini 3.6 Flash</option>
                 <option value="gemini-3.1-pro-preview">Gemini 3.1 Pro (Avançado)</option>
-                <option value="gemini-2.5-flash">Gemini 2.5 Flash</option>
-                <option value="gemini-2.0-flash">Gemini 2.0 Flash</option>
-                <option value="gemini-1.5-flash">Gemini 1.5 Flash</option>
               </select>
             )}
             <datalist id="deepseek-models">
@@ -243,6 +245,36 @@ export default function ConfigForm({ initialSettings }: { initialSettings: Setti
             Limite máximo de tokens na resposta gerada pela IA. Valores baixos podem cortar a resposta no meio. Recomendado: 2048 ou mais.
           </p>
         </div>
+
+        <hr className="border-[#EBE2D5]/50" />
+
+        {/* Thinking Level (Gemini 3.x only) */}
+        {provider === "GEMINI" && /^gemini-3\./.test(model) && (
+          <div className="space-y-3">
+            <div className="flex justify-between items-center">
+              <label className="text-[11px] font-bold text-[#6B5A4B] uppercase tracking-wider block">
+                Nível de Pensamento (Thinking)
+              </label>
+              <span className="text-sm font-extrabold text-amber-700">
+                {thinkingConfig ? thinkingConfig.charAt(0).toUpperCase() + thinkingConfig.slice(1) : "Padrão"}
+              </span>
+            </div>
+            <select
+              value={thinkingConfig}
+              onChange={(e) => setThinkingConfig(e.target.value)}
+              className="w-full bg-[#FAF7F2] border border-[#EBE2D5] text-[#2E251B] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-600 cursor-pointer"
+            >
+              <option value="">Padrão do modelo (medium)</option>
+              <option value="minimal">Minimal (mínimo de raciocínio)</option>
+              <option value="low">Baixo (low)</option>
+              <option value="medium">Médio (medium)</option>
+              <option value="high">Alto (high)</option>
+            </select>
+            <p className="text-xs text-[#8C7A6B] leading-relaxed">
+              Controla o raciocínio interno do modelo. Níveis menores (minimal/low) respondem mais rápido e gastam menos tokens — úteis se o pedido estiver sendo cortado (MAX_TOKENS). Padrão nas chamadas é o do modelo (medium).
+            </p>
+          </div>
+        )}
 
         <hr className="border-[#EBE2D5]/50" />
 

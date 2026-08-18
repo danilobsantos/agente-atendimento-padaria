@@ -1,5 +1,25 @@
 import type { LLMService, LLMMessage, LLMResponse, LLMServiceConfig } from "@/lib/types/llm";
 
+// Gemini 3.x uses categorical thinkingLevel; 2.5 uses a numeric thinkingBudget.
+// Anything else (2.0/1.5/DeepSeek) does not accept thinkingConfig at all.
+const GEMINI_3_LEVELS = ["minimal", "low", "medium", "high"];
+
+function thinkingFromConfig(model: string, thinkingConfig?: string): Record<string, unknown> {
+  if (!thinkingConfig) return {};
+  if (/gemini-3\./.test(model)) {
+    return GEMINI_3_LEVELS.includes(thinkingConfig)
+      ? { thinkingConfig: { thinkingLevel: thinkingConfig } }
+      : {};
+  }
+  if (/gemini-2\.\d/.test(model)) {
+    const budget = Number(thinkingConfig);
+    return Number.isFinite(budget) && budget >= -1
+      ? { thinkingConfig: { thinkingBudget: budget } }
+      : {};
+  }
+  return {};
+}
+
 export class GeminiAdapter implements LLMService {
   private baseUrl = "https://generativelanguage.googleapis.com/v1beta";
 
@@ -54,6 +74,7 @@ export class GeminiAdapter implements LLMService {
         // it keeps the final answer schema-shaped (function calls still work).
         responseMimeType: "application/json",
         ...(config.responseSchema && { responseSchema: config.responseSchema }),
+        ...thinkingFromConfig(config.model, config.thinkingConfig),
       },
       safetySettings: [
         {

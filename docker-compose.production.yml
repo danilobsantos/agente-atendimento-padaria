@@ -20,7 +20,7 @@ services:
   web:
     <<: *app-common
     build: *app-build
-    command: ["npm", "run", "start"]
+    command: ["sh", "-c", "npx prisma migrate deploy && npm run start"]
     environment:
       NODE_ENV: production
       PORT: "3000"
