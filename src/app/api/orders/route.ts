@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getPhoneLookupVariants, normalizePhone } from "@/lib/utils/company";
 
 // GET /api/orders — List orders for a tenant (with filters)
 export async function GET(request: Request) {
@@ -43,23 +44,32 @@ export async function POST(request: Request) {
 
     let finalCustomerId = customerId;
     if (!finalCustomerId && customerPhone) {
-      const cleanPhone = customerPhone.replace(/\D/g, "");
-      const customer = await prisma.customer.upsert({
+      const normalizedPhone = normalizePhone(customerPhone) || customerPhone.replace(/\D/g, "");
+      const phoneVariants = getPhoneLookupVariants(normalizedPhone);
+
+      let customer = await prisma.customer.findFirst({
         where: {
-          tenantId_phone: {
-            tenantId,
-            phone: cleanPhone,
-          },
-        },
-        update: {
-          ...(customerName && { name: customerName }),
-        },
-        create: {
           tenantId,
-          phone: cleanPhone,
-          name: customerName || null,
+          phone: { in: phoneVariants },
         },
       });
+
+      if (customer) {
+        if (customerName && !customer.name) {
+          customer = await prisma.customer.update({
+            where: { id: customer.id },
+            data: { name: customerName },
+          });
+        }
+      } else {
+        customer = await prisma.customer.create({
+          data: {
+            tenantId,
+            phone: normalizedPhone,
+            name: customerName || null,
+          },
+        });
+      }
       finalCustomerId = customer.id;
     }
 

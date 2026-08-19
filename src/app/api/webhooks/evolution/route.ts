@@ -1,5 +1,56 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { getPhoneLookupVariants, normalizePhone } from "@/lib/utils/company";
+
+function extractPhoneFromJid(jid: unknown): string | null {
+  if (!jid || typeof jid !== "string") return null;
+  const userPart = jid.split("@")[0].split(":")[0];
+  const digits = userPart.replace(/\D/g, "");
+  return digits || null;
+}
+
+function resolveCustomerPhone(data: any, info: any): string | null {
+  // In WhatsApp / Evolution Go (whatsmeow), private chats sometimes have a LID (e.g. 123119649996807...@lid)
+  // in Info.Chat or key.remoteJid, while the real phone number is provided in Info.Sender, Info.SenderAlt,
+  // data.sender, data.key.participant, data.key.remoteJidAlt, etc.
+  const candidateJids: unknown[] = [
+    info.SenderAlt,
+    info.Sender,
+    data.senderAlt,
+    data.sender,
+    data.key?.remoteJidAlt,
+    data.key?.participant,
+    data.key?.participantPn,
+    data.senderPhone,
+    data.senderPn,
+    info.Chat,
+    data.key?.remoteJid,
+  ];
+
+  // 1. Highest priority: any candidate ending in @s.whatsapp.net
+  for (const jid of candidateJids) {
+    if (typeof jid === "string" && jid.includes("@s.whatsapp.net")) {
+      const extracted = extractPhoneFromJid(jid);
+      if (extracted) return normalizePhone(extracted);
+    }
+  }
+
+  // 2. Second priority: standard phone length (10 to 14 digits, typically Brazilian 12-13 digits)
+  // LIDs are typically 15+ digits (like 123119649996807...)
+  for (const jid of candidateJids) {
+    if (typeof jid === "string") {
+      const extracted = extractPhoneFromJid(jid);
+      if (extracted && extracted.length >= 10 && extracted.length <= 14) {
+        return normalizePhone(extracted);
+      }
+    }
+  }
+
+  // 3. Fallback: use whatever identifier is in Chat / remoteJid / Sender
+  const fallback = info.Chat ?? data.key?.remoteJid ?? info.Sender ?? data.sender;
+  const fallbackDigits = extractPhoneFromJid(fallback);
+  return fallbackDigits ? normalizePhone(fallbackDigits) : null;
+}
 
 // Evolution Go Webhook - Receives incoming WhatsApp messages
 export async function POST(request: Request) {
@@ -25,13 +76,10 @@ export async function POST(request: Request) {
       return NextResponse.json({ status: "ignored" });
     }
 
-    const remoteJid = info.Chat ?? data.key?.remoteJid;
-    if (!remoteJid) {
+    const phone = resolveCustomerPhone(data, info);
+    if (!phone) {
       return NextResponse.json({ status: "no_jid" });
     }
-
-    // Extract phone number (remove @s.whatsapp.net suffix)
-    const phone = remoteJid.replace("@s.whatsapp.net", "").replace("@g.us", "");
 
     // Extract text content (supports conversation, extendedTextMessage, and button/list replies)
     const text =
@@ -60,23 +108,31 @@ export async function POST(request: Request) {
     // Extract customer pushName
     const pushName = info.PushName || payload.data?.pushName || payload.pushName || null;
 
-    // Find or create customer
-    const customer = await prisma.customer.upsert({
+    // Find existing customer by phone or phone variants (e.g. with/without 55, 8 vs 9 digits)
+    const phoneVariants = getPhoneLookupVariants(phone);
+    let customer = await prisma.customer.findFirst({
       where: {
-        tenantId_phone: {
-          tenantId: tenant.id,
-          phone,
-        },
-      },
-      update: {
-        ...(pushName && { name: pushName }),
-      },
-      create: {
         tenantId: tenant.id,
-        phone,
-        name: pushName,
+        phone: { in: phoneVariants },
       },
     });
+
+    if (customer) {
+      if (pushName && !customer.name) {
+        customer = await prisma.customer.update({
+          where: { id: customer.id },
+          data: { name: pushName },
+        });
+      }
+    } else {
+      customer = await prisma.customer.create({
+        data: {
+          tenantId: tenant.id,
+          phone,
+          name: pushName,
+        },
+      });
+    }
 
     // Save the incoming message
     const chatMessage = await prisma.chatMessage.create({

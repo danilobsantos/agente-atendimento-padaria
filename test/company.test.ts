@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isValidCnpj, normalizePhone, isAllowedLogoExt } from "../src/lib/utils/company";
+import { isValidCnpj, normalizePhone, getPhoneLookupVariants, isAllowedLogoExt } from "../src/lib/utils/company";
 
 test("isValidCnpj accepts valid CNPJs", () => {
   assert.equal(isValidCnpj("11.222.333/0001-81"), true);
@@ -21,11 +21,24 @@ test("isValidCnpj rejects repeated digits", () => {
   assert.equal(isValidCnpj("11.111.111/1111-11"), false);
 });
 
-test("normalizePhone strips formatting and keeps 10+ digits", () => {
-  assert.equal(normalizePhone("(31) 99999-0000"), "31999990000");
-  assert.equal(normalizePhone("31 9 9999-0000"), "31999990000");
+test("normalizePhone standardizes Brazilian numbers with DDI 55", () => {
+  assert.equal(normalizePhone("(31) 99999-0000"), "5531999990000");
+  assert.equal(normalizePhone("31 9 9999-0000"), "5531999990000");
+  assert.equal(normalizePhone("5531999990000"), "5531999990000");
   assert.equal(normalizePhone("123"), "");
   assert.equal(normalizePhone(""), "");
+});
+
+test("getPhoneLookupVariants generates DDI and 9-digit permutations", () => {
+  const variants = getPhoneLookupVariants("5535988160553");
+  assert.ok(variants.includes("5535988160553"));
+  assert.ok(variants.includes("35988160553"));
+  assert.ok(variants.includes("553588160553"));
+  assert.ok(variants.includes("3588160553"));
+
+  const fromLocal = getPhoneLookupVariants("35988160553");
+  assert.ok(fromLocal.includes("5535988160553"));
+  assert.ok(fromLocal.includes("35988160553"));
 });
 
 test("isAllowedLogoExt whitelists safe extensions", () => {
