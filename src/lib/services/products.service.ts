@@ -21,6 +21,33 @@ export interface SearchProduct extends ProductSummary {
   extras: SearchExtra[];
 }
 
+function levenshtein(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  if (m === 0) return n;
+  if (n === 0) return m;
+  let prev = Array.from({ length: n + 1 }, (_, i) => i);
+  for (let i = 1; i <= m; i++) {
+    const cur = [i];
+    for (let j = 1; j <= n; j++) {
+      cur[j] = Math.min(
+        prev[j] + 1,
+        cur[j - 1] + 1,
+        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
+      );
+    }
+    prev = cur;
+  }
+  return prev[n];
+}
+
+// ponytail: substring exata primeiro; fallback fuzzy p/ typos/grafias
+// (ex.: "cappucino" vs "Capuccino"). Busca curta continua exata.
+function matchesNome(nome: string, busca: string): boolean {
+  if (nome.includes(busca)) return true;
+  return busca.length >= 5 && levenshtein(nome, busca) <= 2;
+}
+
 export class ProductsService {
   private static getCacheKey(tenantId: string): string {
     return redisKey("cache", "products", tenantId);
@@ -78,7 +105,7 @@ export class ProductsService {
     const categoria = (opts.categoria || "").trim().toLowerCase();
 
     const filtered = products.filter((p) => {
-      if (busca && !normalize(p.name).includes(normalize(busca))) return false;
+      if (busca && !matchesNome(normalize(p.name), busca)) return false;
       if (categoria && !normalize(p.category).includes(normalize(categoria))) return false;
       return true;
     });
