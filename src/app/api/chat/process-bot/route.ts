@@ -29,6 +29,42 @@ function isExplicitConfirmation(rawMessage: string): boolean {
   return /\b(confirmar|confirmo|pode mandar|pode ser|pode confirmar|t[áa] certo|manda ver|isso mesmo)\b/.test(text);
 }
 
+const ENCOMENDA_RE = /\bencomend\w*\b/i;
+
+function isEncomendaRequest(message: string): boolean {
+  return ENCOMENDA_RE.test(message.trim());
+}
+
+async function triggerEncomendaHandover(customer: {
+  id: string;
+  tenantId: string;
+  name: string | null;
+  phone: string;
+}): Promise<string> {
+  await prisma.customer.update({
+    where: { id: customer.id },
+    data: { isHumanAttending: true },
+  });
+  const { redisChannel, redisPub } = await import("@/lib/redis");
+  await redisPub.publish(
+    redisChannel("tenant", customer.tenantId, "customer"),
+    JSON.stringify({ customerId: customer.id, isHumanAttending: true })
+  );
+  // Reinforce the sidebar badge, then alert staff via a PANEL TOAST (a
+  // dedicated "notification" event), NOT a message in the customer chat.
+  await redisPub.publish(
+    redisChannel("tenant", customer.tenantId, "notification"),
+    JSON.stringify({
+      type: "encomenda",
+      customerId: customer.id,
+      customerName: customer.name || customer.phone,
+      phone: customer.phone,
+      message: "Solicitou encomenda — atendimento humano necessário.",
+    })
+  );
+  return "Perfeito! Encomendas personalizadas são atendidas por um atendente. Em instantes alguém vai te chamar por aqui para entender melhor o que você precisa. 😊";
+}
+
 export async function POST(request: Request, deps: BotRouteDeps = {}) {
   try {
     const { customerId, message } = await request.json();
@@ -91,6 +127,11 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
     let finalBotText = routerResponse.reply || "";
 
     if (!routerResponse.bypassed) {
+      // Encomenda é decisão determinística (palavra-chave), não depende do LLM
+      // classificar orderType="ENCOMENDA". Detectada já no início → handover humano.
+      if (isInitial && isEncomendaRequest(fullMessage)) {
+        finalBotText = await triggerEncomendaHandover(customer);
+      } else {
       // 4. Fallback to LLM if Intent Router didn't handle it.
       // The LLM uses the "consultar_cardapio" tool to look up products/prices on demand
       // (no full menu is injected into every call). We still build a full-catalog idMap
@@ -145,28 +186,7 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
 
       // ENCOMENDA at conversation start → hand over to a human + notify panel
       if (isInitial && agentResponse.orderType === "ENCOMENDA") {
-        finalBotText = "Perfeito! Encomendas personalizadas são atendidas por um atendente. Em instantes alguém vai te chamar por aqui para entender melhor o que você precisa. 😊";
-        await prisma.customer.update({
-          where: { id: customer.id },
-          data: { isHumanAttending: true },
-        });
-        const { redisChannel, redisPub } = await import("@/lib/redis");
-        await redisPub.publish(
-          redisChannel("tenant", customer.tenantId, "customer"),
-          JSON.stringify({ customerId: customer.id, isHumanAttending: true })
-        );
-        // Reinforce the sidebar badge, then alert staff via a PANEL TOAST (a
-        // dedicated "notification" event), NOT a message in the customer chat.
-        await redisPub.publish(
-          redisChannel("tenant", customer.tenantId, "notification"),
-          JSON.stringify({
-            type: "encomenda",
-            customerId: customer.id,
-            customerName: customer.name || customer.phone,
-            phone: customer.phone,
-            message: "Solicitou encomenda — atendimento humano necessário.",
-          })
-        );
+        finalBotText = await triggerEncomendaHandover(customer);
       } else {
       // 1. Process customer info if present
       if (agentResponse.customerInfo) {
@@ -248,6 +268,7 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
         await SessionService.clearSession(session.tenantId, session.customerId);
       }
       } // else: normal bot flow (skip order processing for ENCOMENDA)
+      } // else: caminho LLM (encomenda por palavra-chave já tratada acima)
     }
 
     // 5. Append interaction to context

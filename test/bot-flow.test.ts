@@ -244,6 +244,20 @@ test("encomenda ativa atendimento humano e não cria pedido", async () => {
   assert.equal(orders, 0);
 });
 
+// Regressão: LLM falhou em classificar como ENCOMENDA (devolveu generico/NONE).
+// A palavra-chave "encomenda" deve disparar o handover humano mesmo assim.
+test("palavra-chave encomenda ativa atendimento humano mesmo com LLM errado", async () => {
+  const res = await runTurn("queria fazer uma encomenda", canned("generico"));
+  const body = await res.json();
+
+  assert.equal(body.status, "success");
+  assert.match(body.response, /atendente/);
+  const customer = await prisma.customer.findUniqueOrThrow({ where: { id: CUSTOMER_ID } });
+  assert.equal(customer.isHumanAttending, true);
+  const orders = await prisma.order.count({ where: { customerId: CUSTOMER_ID } });
+  assert.equal(orders, 0);
+});
+
 // Pickup: sem endereço, mas com pagamento.
 test("retirada no balcão não exige endereço", async () => {
   await runTurn("boa noite", canned("generico"));
