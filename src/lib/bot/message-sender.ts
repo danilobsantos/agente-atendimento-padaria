@@ -76,7 +76,11 @@ interface SendChunkedParams {
  */
 export async function sendChunkedResponse(params: SendChunkedParams): Promise<void> {
   const { phone, customerId, tenantId, customerName, isHumanAttending, text } = params;
-  const chunks = splitMessage(text);
+  if (!text || !text.trim()) {
+    console.warn(`[sendChunkedResponse] Ignorando envio de mensagem vazia para ${phone}`);
+    return;
+  }
+  const chunks = splitMessage(text.trim());
 
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];

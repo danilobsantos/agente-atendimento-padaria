@@ -117,6 +117,9 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
     // 2. Load Session from Redis (TTL from admin panel)
     SessionService.setTTL(botSetting.sessionTimeout ?? 1800);
     const session = await SessionService.getSession(customer.tenantId, customerId, customer.phone, customer.activeOrderId || undefined);
+    if (customer.name && !session.customer.name) {
+      session.customer.name = customer.name;
+    }
 
     // Only classify delivery/pickup/order-type in the initial messages of the conversation
     const isInitial = session.state === BotState.START || session.state === BotState.SHOW_MENU;
@@ -167,7 +170,10 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
             messageContextLimit: botSetting.messageContextLimit,
             temperature: botSetting.temperature ?? 0.7,
             ...(botSetting.thinkingConfig && { thinkingConfig: botSetting.thinkingConfig }),
-            systemPrompt: botSetting.systemPrompt || "Você é um assistente virtual.",
+            systemPrompt: [
+              botSetting.systemPrompt || "Você é um assistente virtual.",
+              customer.name ? `Nome do cliente (já cadastrado/informado): ${customer.name}. NÃO pergunte o nome novamente.` : "",
+            ].filter(Boolean).join("\n"),
             menuUrl,
             cartDescription,
           },
@@ -272,8 +278,9 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
     }
 
     // 5. Append interaction to context
-    await SessionService.appendContext(session, "user", fullMessage);
-    await SessionService.appendContext(session, "assistant", finalBotText);
+    const ctxLimit = Math.max(10, (botSetting.messageContextLimit ?? 10) * 2);
+    await SessionService.appendContext(session, "user", fullMessage, ctxLimit);
+    await SessionService.appendContext(session, "assistant", finalBotText, ctxLimit);
 
     // Release Lock
     await MessageBuffer.releaseLock(customer.tenantId, customerId);

@@ -111,7 +111,7 @@ export class SessionService {
     await redis.del(key);
   }
 
-  static async appendContext(session: BotSession, role: "user" | "assistant", content: string, limit = 5): Promise<void> {
+  static async appendContext(session: BotSession, role: "user" | "assistant", content: string, limit = 20): Promise<void> {
     session.context.push({ role, content });
     if (session.context.length > limit) {
       session.context = session.context.slice(-limit);

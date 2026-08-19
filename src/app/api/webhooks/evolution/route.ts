@@ -81,6 +81,11 @@ export async function POST(request: Request) {
       return NextResponse.json({ status: "no_jid" });
     }
 
+    if (phone.length > 14) {
+      console.warn(`[Webhook] Skipping LID-only phone: ${phone}`);
+      return NextResponse.json({ status: "skipped_lid" });
+    }
+
     // Extract text content (supports conversation, extendedTextMessage, and button/list replies)
     const text =
       message.conversation ||

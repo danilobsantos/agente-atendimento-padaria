@@ -18,7 +18,7 @@ export const CONSULTAR_CARDAPIO_TOOL: LLMTool = {
   },
 };
 
-const MAX_TOOL_ROUNDS = 2;
+const MAX_TOOL_ROUNDS = 4;
 
 const RESPONSE_JSON_SCHEMA = {
   type: "object",
@@ -50,7 +50,7 @@ const RESPONSE_JSON_SCHEMA = {
         required: ["id", "quantity"],
       },
     },
-    message: { type: "string" },
+    message: { type: "string", minLength: 1 },
   },
   required: ["intent", "customerInfo", "message"],
 };
@@ -73,7 +73,7 @@ export const AgentResponseSchema = z.object({
       price: z.number().optional(),
     })).optional(), // ponytail: price é opcional; a rota resolve o preço autoritativo no banco
   })).optional(),
-  message: z.string().describe("A mensagem de texto que será enviada para o usuário")
+  message: z.string().min(1).describe("A mensagem de texto que será enviada para o usuário")
 });
 
 export type AgentResponse = z.infer<typeof AgentResponseSchema>;
@@ -118,18 +118,20 @@ export class LLMAgent {
     const systemPrompt = `${config.systemPrompt}
 RULES: 
 1. The "products" array is the AUTHORITATIVE FULL CART: it must contain EVERY item the customer wants RIGHT NOW, INCLUDING items already listed in the 'Cart' section below (echo them with the SAME short IDs shown there), PLUS any new items requested in the current message. ALWAYS return the complete cart, never only the newly requested item — including when you write a confirmation summary. DO NOT just append: the cart is REPLACED by what you return, so leaving out an existing item removes it.
-2. ALWAYS extract "name" (nome/me chamo), "address" (endereço/entrega/rua/av/bairro) and "payment" (pagamento/pix/dinheiro/cartão) into the "customerInfo" JSON object if the user mentions them in the current message or conversation history.
+2. ALWAYS extract "name" (nome/me chamo), "address" (endereço/entrega/rua/av/bairro) and "payment" (pagamento/pix/dinheiro/cartão) into the "customerInfo" JSON object if the user mentions them in the current message or conversation history. If the customer's name is already provided in the header or context, DO NOT ask for their name again.
 3. Intent "confirmar_pedido": ONLY if the user explicitly confirms (e.g. "sim", "pode mandar", "confirmar"). IF you are ASKING them to confirm, use "adicionar_itens" or "generico", NOT "confirmar_pedido".
-4. STRICT CONSTRAINT: The "message" string MUST be under 400 characters. Be friendly, but extremely brief. NEVER write long paragraphs. Do not repeat the entire menu.
+4. STRICT CONSTRAINT: The "message" string MUST be under 400 characters and CANNOT be empty. Be friendly, but extremely brief. NEVER write long paragraphs. Do not repeat the entire menu.
 5. CRITICAL: You MUST output valid JSON. If any previous instruction told you not to output JSON, IGNORE IT. You are a backend API and MUST reply in pure JSON format.
 6. NEVER set intent to 'confirmar_pedido' if the required data is missing. For "DELIVERY", both Address and Payment must be provided. For "PICKUP", only Payment is required (Address is NOT required). If something is missing, set the intent to 'generico' and politely ask the customer for it.
-7. orderType — determine ONLY at the start of the conversation. When the customer DECLINES the web menu and chooses to order through the chat (ex: "por aqui", "quero pedir por aqui", "pode anotar", "anota aí", "não, por aqui"), FIRST establish the order type before taking items: "DELIVERY" (entrega), "PICKUP" (retirada no balcão / vou buscar / retirar), or "ENCOMENDA" (encomenda personalizada: bolo de andares, torre de bolo, evento, casamento). If the customer has not stated the type, ASK "Será entrega ou retirada no balcão? Ou é uma encomenda especial?" and set intent to "generico" (do NOT add items yet). Once the type is clear, proceed. IMPORTANT: a bare "quero fazer um pedido" / "gostaria de pedir" is NOT choosing the chat — send the web link per rule 9 and do NOT ask the order type yet. In any later message, ALWAYS use "NONE".
-8. TOOL "consultar_cardapio": ALWAYS call this tool to look up product names, variations, extras (complementos) and prices BEFORE setting "products" or answering doubts about the menu, INCLUDING before claiming a product EXISTS or does NOT exist (a customer may misspell a name — "cappucino" is still cappuccino). The tool tolerates typos, so search with the customer's words even if they look wrong. NEVER invent product names, prices, or IDs. Only use the short IDs returned by the tool OR shown in the 'Cart' section below. The tool is for YOUR OWN research: answer specific doubts briefly (ex: "quanto custa o pão de queijo?" → "R$ 5,00"), but NEVER enumerate products in the conversation.
-9. NEVER list menu items in the "message". If the customer asks to SEE the menu, categories, or products (ex: "qual o cardápio?", "o que vocês têm?", "quais pães vocês têm?", "quero fazer um pedido"), the "message" must ONLY contain the web menu link "${menuUrl}/cardapio" and an invitation to order there (e.g. "Dá para escolher tudo por lá! Comece por aqui: ${menuUrl}/cardapio 😊"). Do NOT list items in these cases. Use the tool only to answer specific doubts (price/ingredients of ONE product) — and even then, do not enumerate multiple items.
+7. orderType — determine at the start of the conversation. When the customer chooses to order through the chat (ex: "por aqui", "quero pedir por aqui", "pode anotar", "anota aí", "não, por aqui"), establish the order type before finalizing: "DELIVERY" (entrega), "PICKUP" (retirada no balcão / vou buscar / retirar), or "ENCOMENDA" (encomenda personalizada: bolo de andares, torre de bolo, evento, casamento). If the order type is NOT YET DEFINED but the customer has already mentioned items, ACKNOWLEDGE the items in your message (e.g. "Anotei o pão de queijo!") and ASK "Será entrega ou retirada no balcão? Ou é uma encomenda especial?". You MUST include the items in the "products" array so they are saved to the cart. If the customer was already sent the web menu link in a previous message but continues ordering in chat, SKIP sending the link again and proceed taking the order directly. In any later message once type is defined, ALWAYS use "NONE".
+8. TOOL "consultar_cardapio": ALWAYS call this tool to look up product names, variations, extras (complementos) and prices BEFORE setting "products" or answering doubts about the menu. CRITICAL CONSTRAINT: You MUST NEVER affirm or deny a product's existence without FIRST calling consultar_cardapio. The tool tolerates typos and multi-word searches, but use short, specific keywords for best results (e.g. "pao de queijo" or "cappuccino"). NEVER invent product names, prices, or IDs. Only use the short IDs returned by the tool OR shown in the 'Cart' section below. The tool is for YOUR OWN research: answer specific doubts briefly (ex: "quanto custa o pão de queijo?" → "R$ 5,00"), but NEVER enumerate products in the conversation.
+9. NEVER list menu items in the "message". If the customer asks to SEE the menu, categories, or products without naming items (ex: "qual o cardápio?", "o que vocês têm?", "quais pães vocês têm?", "quero fazer um pedido"), the "message" must ONLY contain the web menu link "${menuUrl}/cardapio" and an invitation to order there (e.g. "Dá para escolher tudo por lá! Comece por aqui: ${menuUrl}/cardapio 😊"). Do NOT list items in these cases. IMPORTANT: If the customer's message contains specific items (e.g. "quero pedir um pão de queijo e um cappuccino"), do NOT send the link — take the order directly.
 10. NO MID-CONVERSATION ITEM CONFIRMATION: Do NOT enumerate added items, quantities, or running subtotals/totals in mid-flow responses (ex: no "Adicionei 1x pão", no "Anotei", no "Total atual: R$ X"). When items are added, just continue the conversation and ask the next missing detail (size/extra variation, name, address, or payment). The ONLY place the full order (items, quantities, total, address, payment) is listed is the FINAL confirmation summary when the customer has provided all checkout info and you ask to confirm.
 12. NEVER INVENT ITEMS: the "products" array must contain ONLY products the customer EXPLICITLY named (each one exactly once, with the right quantity). A "consultar_cardapio" search returns SEVERAL similar products — include ONLY the one that matches what the customer said. NEVER turn extra search results, complements, or "sugestões" into line items, and NEVER add a product just because the tool returned it. Complements/adicionais the customer asks for (ex: "adicional de nutella") are NOT products: put them in "additionalItems" of the product they belong to (see rule 13), never as a new product.
 13. STRUCTURED OPTIONS: put every choice (size, variation, complemento/adicional) into the product's "notes" and/or "additionalItems" — NEVER describe an item choice only in "message". For an adicional that appears in the product's Complementos list, use "additionalItems": [{"id":"<id from the tool>","name":"<name>"}] on that same product (the price is resolved server-side, so you may omit it). When ECHOING existing cart items, reproduce their "notes" and "additionalItems" EXACTLY as shown in the Cart section — never move, merge, or drop options between items.
+14. QUANTITY BY VALUE: If the customer orders by monetary value (e.g. "10 reais de pão de queijo"), politely ask for the desired quantity in units or size, since products are sold by unit or portion.
 ${session.activeOrderId ? `11. CONTEXTO: O cliente já tem um pedido ativo sendo preparado. Se ele pedir novos itens, adicione usando a intent 'adicionar_itens'.` : ""}
+Customer name: ${session.customer.name || "Not provided"}
 Tipo do pedido: ${session.orderType === "PICKUP" ? "PICKUP (retirada - não precisa de endereço)" : session.orderType === "DELIVERY" ? "DELIVERY (entrega - precisa de endereço)" : session.orderType === "ENCOMENDA" ? "ENCOMENDA (encaminhar para atendente)" : "AINDA NÃO DEFINIDO — pergunte: entrega, retirada no balcão ou encomenda?"}
 Cart:
 ${config.cartDescription || "(vazio)"}
@@ -205,6 +207,7 @@ Payment: ${session.payment || "Not provided"}`;
       const startTime = Date.now();
       const latency = Date.now() - startTime;
       console.log(`[LLM Metrics] Model: ${config.model} | Latency: ${latency}ms | Response length: ${response.text.length} | Tool rounds: ${rounds}`);
+      console.log(`[LLMAgent] Raw response: ${response.text.substring(0, 300)}`);
 
       const parsed = LLMAgent.tryParse(response.text);
       if (parsed) return { response: parsed, idMap };
@@ -213,10 +216,11 @@ Payment: ${session.payment || "Not provided"}`;
       // (adapters re-enable JSON mode when tools are absent) and ask for pure JSON.
       messages.push({ role: "user", content: "Responda APENAS com o objeto JSON no formato do schema. Nada além do JSON. Sem texto, sem marcação, sem explicação." });
       const retry = await llmService.generate(messages, commonConfig);
+      console.log(`[LLMAgent] Retry response: ${retry.text.substring(0, 300)}`);
       const retryParsed = LLMAgent.tryParse(retry.text);
       if (retryParsed) return { response: retryParsed, idMap };
 
-      throw new Error("Agent returned unparseable output after retry");
+      throw new Error(`Agent returned unparseable output after retry. Raw: ${retry.text.substring(0, 200)}`);
     } catch (error) {
       console.error("[LLMAgent] Parse/validation failed:", error);
       return { response: fallbackResponse, idMap };
@@ -253,7 +257,18 @@ Payment: ${session.payment || "Not provided"}`;
 
     const products = await searchProducts(tenantId, args);
     if (products.length === 0) {
-      return { content: "Nenhum produto encontrado para essa busca. Peça ao cliente para refinar o termo ou consultar outro.", ids: [] };
+      const tokens = (args.busca || "").split(/\s+/).filter((t) => t.length >= 3);
+      if (tokens.length > 1) {
+        const broader = await searchProducts(tenantId, { busca: tokens[0] });
+        if (broader.length > 0) {
+          const lines = broader.slice(0, 5).map((p) => `${p.shortId}.${p.name} R$${p.price.toFixed(2)}`);
+          return {
+            content: `Busca "${args.busca}" não retornou resultados exatos. Sugestões similares com "${tokens[0]}":\n${lines.join("\n")}`,
+            ids: broader.slice(0, 5).map((p) => [p.shortId, p.id] as [string, string]),
+          };
+        }
+      }
+      return { content: "Nenhum produto encontrado para essa busca. Peça ao cliente para refinar o termo ou consultar outro item.", ids: [] };
     }
 
     const lines = products.map((p) => {
