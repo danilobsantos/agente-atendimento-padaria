@@ -173,11 +173,12 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
             systemPrompt: [
               botSetting.systemPrompt || "Você é um assistente virtual.",
               customer.name ? `Nome do cliente (já cadastrado/informado): ${customer.name}. NÃO pergunte o nome novamente.` : "",
+              `Taxa de entrega atual: R$ ${customer.tenant.deliveryFee?.toFixed(2) || "0.00"}.`
             ].filter(Boolean).join("\n"),
             menuUrl,
             cartDescription,
           },
-          { llmService: deps.llmService }
+          { llmService: deps.llmService, uuidToShort }
         );
 
         // Merge the agent's tool-resolved IDs over the full-catalog fallback
@@ -281,6 +282,38 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
             await SessionService.clearSession(session.tenantId, session.customerId);
           }
           
+          // Injeção de Resumo: Se o pedido tem itens e forma de pagamento, e endereço (se delivery),
+          // e ainda não foi finalizado nem cancelado, injetamos o resumo do carrinho para o cliente validar.
+          const isReadyToConfirm = session.order.items.length > 0 && session.payment && (session.orderType !== 'DELIVERY' || session.customer.address);
+          if (isReadyToConfirm && agentResponse.intent !== "confirmar_pedido" && agentResponse.intent !== "cancelar_pedido") {
+            const hasSummary = finalBotText.includes("Resumo") || finalBotText.includes("Total:");
+            if (!hasSummary) {
+              const deliveryFee = session.orderType === 'DELIVERY' ? (customer.tenant.deliveryFee || 0) : 0;
+              const subtotal = session.order.items.reduce((acc, it) => acc + (it.price * it.quantity), 0);
+              const total = subtotal + deliveryFee;
+              
+              let summary = `\n\n*📋 Resumo do seu pedido:*\n`;
+              session.order.items.forEach(it => {
+                const extras = it.additionalItems && it.additionalItems.length > 0 
+                  ? ` (Adic: ${it.additionalItems.map(a => a.name).join(", ")})` 
+                  : "";
+                summary += `- ${it.quantity}x ${it.name}${extras}: R$ ${(it.price * it.quantity).toFixed(2)}\n`;
+              });
+              summary += `\n*Subtotal:* R$ ${subtotal.toFixed(2)}`;
+              if (session.orderType === 'DELIVERY') {
+                summary += `\n*Taxa de entrega:* R$ ${deliveryFee.toFixed(2)}`;
+                summary += `\n*Endereço:* ${session.customer.address}`;
+              } else if (session.orderType === 'PICKUP') {
+                summary += `\n*Tipo:* Retirada no balcão`;
+              }
+              summary += `\n*Pagamento:* ${session.payment}`;
+              summary += `\n*Total a pagar:* R$ ${total.toFixed(2)}\n`;
+              summary += `\nPodemos confirmar o pedido? (Responda "sim" para finalizar ou peça para alterar algo).`;
+              
+              finalBotText += summary;
+            }
+          }
+
           compressedContext = JSON.stringify({
             intent: agentResponse.intent,
             cart: session.order.items.map(i => `${i.quantity}x ${i.name}`),

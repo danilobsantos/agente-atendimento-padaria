@@ -94,6 +94,7 @@ export interface LLMAgentConfig {
 export interface LLMAgentDeps {
   llmService?: LLMService;
   searchProducts?: (tenantId: string, opts: { busca?: string; categoria?: string }) => Promise<SearchProduct[]>;
+  uuidToShort?: Map<string, string>;
 }
 
 export interface AgentProcessResult {
@@ -203,7 +204,7 @@ ${session.activeOrderId ? `\nAVISO: O cliente já tem um pedido ativo sendo prep
         ];
 
         for (const tc of response.tool_calls) {
-          const { content, ids } = await LLMAgent.executeTool(session.tenantId, tc, searchProducts);
+          const { content, ids } = await LLMAgent.executeTool(session.tenantId, tc, searchProducts, dep.uuidToShort);
           for (const [shortId, uuid] of ids) idMap.set(shortId, uuid);
           toolMessages.push({
             role: "tool",
@@ -259,7 +260,8 @@ ${session.activeOrderId ? `\nAVISO: O cliente já tem um pedido ativo sendo prep
   private static async executeTool(
     tenantId: string,
     tc: LLMToolCall,
-    searchProducts: (tenantId: string, opts: { busca?: string; categoria?: string }) => Promise<SearchProduct[]>
+    searchProducts: (tenantId: string, opts: { busca?: string; categoria?: string }) => Promise<SearchProduct[]>,
+    uuidToShort?: Map<string, string>
   ): Promise<{ content: string; ids: [string, string][] }> {
     if (tc.name !== "consultar_cardapio") {
       return { content: "Ferramenta desconhecida.", ids: [] };
@@ -278,10 +280,16 @@ ${session.activeOrderId ? `\nAVISO: O cliente já tem um pedido ativo sendo prep
       if (tokens.length > 1) {
         const broader = await searchProducts(tenantId, { busca: tokens[0] });
         if (broader.length > 0) {
-          const lines = broader.slice(0, 5).map((p) => `${p.shortId}.${p.name} R$${p.price.toFixed(2)}`);
+          const lines = broader.slice(0, 5).map((p) => {
+            const sid = uuidToShort ? (uuidToShort.get(p.id) || p.id) : p.shortId;
+            return `${sid}.${p.name} R$${p.price.toFixed(2)}`;
+          });
           return {
             content: `Busca "${args.busca}" não retornou resultados exatos. Sugestões similares com "${tokens[0]}":\n${lines.join("\n")}`,
-            ids: broader.slice(0, 5).map((p) => [p.shortId, p.id] as [string, string]),
+            ids: broader.slice(0, 5).map((p) => {
+              const sid = uuidToShort ? (uuidToShort.get(p.id) || p.id) : p.shortId;
+              return [sid, p.id] as [string, string];
+            }),
           };
         }
       }
@@ -292,12 +300,16 @@ ${session.activeOrderId ? `\nAVISO: O cliente já tem um pedido ativo sendo prep
       const extrasText = p.extras.length > 0
         ? ` | Complementos: ${p.extras.map(e => `${e.name}(+R$${e.price.toFixed(2)})[id:${e.id}]`).join(", ")}`
         : "";
-      return `${p.shortId}.${p.name} R$${p.price.toFixed(2)}${extrasText}`;
+      const sid = uuidToShort ? (uuidToShort.get(p.id) || p.id) : p.shortId;
+      return `${sid}.${p.name} R$${p.price.toFixed(2)}${extrasText}`;
     });
 
     return {
       content: lines.join("\n"),
-      ids: products.map(p => [p.shortId, p.id] as [string, string]),
+      ids: products.map(p => {
+        const sid = uuidToShort ? (uuidToShort.get(p.id) || p.id) : p.shortId;
+        return [sid, p.id] as [string, string];
+      }),
     };
   }
 }

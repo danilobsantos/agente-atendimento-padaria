@@ -25,9 +25,10 @@ export class IntentRouter {
         if (text === "oi" || text === "ola" || text === "olá" || text === "bom dia" || text === "boa tarde" || text === "boa noite") {
           session.state = BotState.SHOW_MENU;
           await SessionService.saveSession(session);
+          const menuUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
           return { 
             bypassed: true, 
-            reply: "Olá! Bem-vindo(a) à Sabor de Minas! 😊 O que você gostaria de pedir hoje?" 
+            reply: `Olá! Bem-vindo(a) à Sabor de Minas! 😊 O que você gostaria de pedir hoje? Se preferir, você pode pedir pelo nosso cardápio online: ${menuUrl}/cardapio` 
           };
         }
         break;
