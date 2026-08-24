@@ -225,13 +225,13 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
               ...p,
               id: idMap.get(p.id) || p.id, // Resolve short ID to UUID, fallback to original
             }));
-            
+
             // Validação anti-alucinação: remove IDs que não existem no banco
             const validProducts = mappedProducts.filter(p => products.some(prod => prod.id === p.id));
             if (validProducts.length !== mappedProducts.length) {
               console.warn(`[Bot Process] LLM inventou ${mappedProducts.length - validProducts.length} produto(s) inexistente(s). Filtrando.`);
             }
-            
+
             // Items are added silently: confirmation appears only in the final order summary,
             // never as a machine line after each addition. A stale active order
             // (DISPATCHED/READY/DELIVERED/CANCELLED) is released internally, so items
@@ -281,7 +281,7 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
             }
             await SessionService.clearSession(session.tenantId, session.customerId);
           }
-          
+
           // Injeção de Resumo: Se o pedido tem itens e forma de pagamento, e endereço (se delivery),
           // e ainda não foi finalizado nem cancelado, injetamos o resumo do carrinho para o cliente validar.
           const isReadyToConfirm = session.order.items.length > 0 && session.payment && (session.orderType !== 'DELIVERY' || session.customer.address);
@@ -291,11 +291,11 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
               const deliveryFee = session.orderType === 'DELIVERY' ? (customer.tenant.deliveryFee || 0) : 0;
               const subtotal = session.order.items.reduce((acc, it) => acc + (it.price * it.quantity), 0);
               const total = subtotal + deliveryFee;
-              
+
               let summary = `\n\n*📋 Resumo do seu pedido:*\n`;
               session.order.items.forEach(it => {
-                const extras = it.additionalItems && it.additionalItems.length > 0 
-                  ? ` (Adic: ${it.additionalItems.map(a => a.name).join(", ")})` 
+                const extras = it.additionalItems && it.additionalItems.length > 0
+                  ? ` (Adic: ${it.additionalItems.map(a => a.name).join(", ")})`
                   : "";
                 summary += `- ${it.quantity}x ${it.name}${extras}: R$ ${(it.price * it.quantity).toFixed(2)}\n`;
               });
@@ -309,7 +309,7 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
               summary += `\n*Pagamento:* ${session.payment}`;
               summary += `\n*Total a pagar:* R$ ${total.toFixed(2)}\n`;
               summary += `\nPodemos confirmar o pedido? (Responda "sim" para finalizar ou peça para alterar algo).`;
-              
+
               finalBotText += summary;
             }
           }

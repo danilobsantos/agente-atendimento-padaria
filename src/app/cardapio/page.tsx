@@ -1,28 +1,65 @@
 import { prisma } from "@/lib/prisma";
 import CardapioView from "./CardapioView";
+import { getAuthUser } from "@/lib/utils/auth-route";
 
 export const dynamic = "force-dynamic";
 
-export default async function CardapioPage() {
-  // Fetch first active tenant (SaaS ready: could read from subdomains or headers)
-  const tenant = await prisma.tenant.findFirst({
-    where: { active: true },
-    include: {
-      categories: {
-        where: { isActive: true },
-        orderBy: { sortOrder: "asc" },
+interface CardapioPageProps {
+  searchParams?: Promise<{ tenant?: string }>;
+}
+
+export default async function CardapioPage({ searchParams }: CardapioPageProps) {
+  const resolvedParams = searchParams ? await searchParams : undefined;
+  const authUser = await getAuthUser();
+  const tenantSlugOrId = resolvedParams?.tenant || authUser?.tenantId;
+
+  let tenant = null;
+
+  if (tenantSlugOrId) {
+    tenant = await prisma.tenant.findFirst({
+      where: {
+        active: true,
+        OR: [{ id: tenantSlugOrId }, { slug: tenantSlugOrId }],
       },
-      products: {
-        where: { isAvailable: true },
-        include: { category: true },
-        orderBy: { sortOrder: "asc" },
+      include: {
+        categories: {
+          where: { isActive: true },
+          orderBy: { sortOrder: "asc" },
+        },
+        products: {
+          where: { isAvailable: true },
+          include: { category: true },
+          orderBy: { sortOrder: "asc" },
+        },
+        additionalItems: {
+          where: { isAvailable: true },
+          orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+        },
       },
-      additionalItems: {
-        where: { isAvailable: true },
-        orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+    });
+  }
+
+  if (!tenant) {
+    tenant = await prisma.tenant.findFirst({
+      where: { active: true },
+      orderBy: { updatedAt: "desc" },
+      include: {
+        categories: {
+          where: { isActive: true },
+          orderBy: { sortOrder: "asc" },
+        },
+        products: {
+          where: { isAvailable: true },
+          include: { category: true },
+          orderBy: { sortOrder: "asc" },
+        },
+        additionalItems: {
+          where: { isAvailable: true },
+          orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+        },
       },
-    },
-  });
+    });
+  }
 
   if (!tenant) {
     return (

@@ -5,7 +5,7 @@ import { useSocket } from "@/hooks/use-socket";
 import { useSearchParams } from "next/navigation";
 import { Coffee, MessageSquare, Globe, ArrowRight, CheckCircle2, User, MapPin, Trash2, AlertTriangle, Printer, Bell, BellOff } from "lucide-react";
 import { printReceipt80mm } from "@/lib/utils/print-receipt";
-import { formatOrderNumber } from "@/lib/utils/format-order";
+import { formatOrderNumber, parseOrderNotes } from "@/lib/utils/format-order";
 import { useSound } from "./sound-context";
 
 interface Product {
@@ -41,6 +41,7 @@ interface Order {
     street?: string;
     number?: string;
     neighborhood?: string;
+    complement?: string;
   } | null;
   notes: string | null;
   createdAt: string;
@@ -431,6 +432,20 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
                           </div>
                         </div>
 
+                        {/* Order Total & Delivery fee */}
+                        <div className="flex items-center justify-between text-xs pt-1.5 border-t border-[#FAF7F2]">
+                          <span className="text-[#8C7A6B] text-[11px]">
+                            {order.deliveryAddress ? (
+                              <span>Taxa: <strong className="text-[#2E251B]">R$ {(order.deliveryFee ?? 0).toFixed(2)}</strong></span>
+                            ) : (
+                              <span className="text-violet-700 font-medium">Retirada</span>
+                            )}
+                          </span>
+                          <span className="font-extrabold text-amber-900 text-sm">
+                            R$ {order.total.toFixed(2)}
+                          </span>
+                        </div>
+
                         {/* Action buttons */}
                         <div className="flex gap-2 pt-1" onClick={(e) => e.stopPropagation()}>
                           {col.key !== "DELIVERED" ? (
@@ -566,11 +581,21 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
                   </div>
                 ))}
 
-                {(selectedOrderDetails.deliveryFee ?? 0) > 0 && (
-                  <div className="flex justify-between items-center text-[#6B5A4B] text-sm pt-1.5">
-                    <span>Taxa de entrega</span>
-                    <span className="font-semibold">R$ {(selectedOrderDetails.deliveryFee ?? 0).toFixed(2)}</span>
-                  </div>
+                {selectedOrderDetails.deliveryAddress && (
+                  <>
+                    <div className="flex justify-between items-center text-[#6B5A4B] text-sm pt-2 border-t border-[#EBE2D5]">
+                      <span>Subtotal</span>
+                      <span className="font-semibold">
+                        R$ {(selectedOrderDetails.total - (selectedOrderDetails.deliveryFee ?? 0)).toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center text-[#6B5A4B] text-sm pt-1">
+                      <span>Taxa de entrega</span>
+                      <span className="font-semibold">
+                        R$ {(selectedOrderDetails.deliveryFee ?? 0).toFixed(2)}
+                      </span>
+                    </div>
+                  </>
                 )}
                 <div className="pt-2.5 border-t border-[#EBE2D5] flex justify-between items-center font-extrabold text-amber-950 text-sm">
                   <span>Valor Total</span>
@@ -587,19 +612,32 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
                   <p className="font-bold text-[#2E251B]">Endereço de Entrega:</p>
                   <p className="text-[#6B5A4B] mt-0.5">
                     {selectedOrderDetails.deliveryAddress.fullAddress ||
-                      `${selectedOrderDetails.deliveryAddress.street || ""}, ${selectedOrderDetails.deliveryAddress.number || ""} - ${selectedOrderDetails.deliveryAddress.neighborhood || ""}`}
+                      `${selectedOrderDetails.deliveryAddress.street || ""}, ${selectedOrderDetails.deliveryAddress.number || ""} - ${selectedOrderDetails.deliveryAddress.neighborhood || ""}${selectedOrderDetails.deliveryAddress.complement ? ` (${selectedOrderDetails.deliveryAddress.complement})` : ""}`}
                   </p>
                 </div>
               </div>
             )}
 
             {/* Payment notes / details */}
-            {selectedOrderDetails.notes && (
-              <div className="text-xs text-[#6B5A4B] bg-[#F5EFE6] border border-[#EBE2D5] p-3 rounded-xl">
-                <p className="font-bold text-[#2E251B] mb-0.5">Observações / Pagamento:</p>
-                <p className="italic">{selectedOrderDetails.notes}</p>
-              </div>
-            )}
+            {selectedOrderDetails.notes && (() => {
+              const { paymentMethod, observations } = parseOrderNotes(selectedOrderDetails.notes);
+              return (
+                <div className="text-xs text-[#6B5A4B] bg-[#F5EFE6] border border-[#EBE2D5] p-3 rounded-xl space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <span className="font-bold text-[#2E251B]">Forma de Pagamento:</span>
+                    <span className="font-extrabold text-amber-900 bg-amber-600/10 px-2 py-0.5 rounded-md border border-amber-600/20">
+                      {paymentMethod}
+                    </span>
+                  </div>
+                  {observations && (
+                    <div className="pt-1.5 border-t border-[#EBE2D5]">
+                      <p className="font-bold text-[#2E251B] mb-0.5">Observações:</p>
+                      <p className="italic text-[#6B5A4B]">{observations}</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Actions */}
             <div className="flex gap-3 pt-2">

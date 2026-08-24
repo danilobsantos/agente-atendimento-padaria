@@ -96,6 +96,7 @@ export default function CardapioView({
   const [street, setStreet] = useState("");
   const [number, setNumber] = useState("");
   const [neighborhood, setNeighborhood] = useState("");
+  const [complement, setComplement] = useState("");
   const [payment, setPayment] = useState("PIX");
   const [orderType, setOrderType] = useState<"DELIVERY" | "PICKUP">("DELIVERY");
   const [specialNotes, setSpecialNotes] = useState("");
@@ -179,7 +180,7 @@ export default function CardapioView({
           customerPhone: phone,
           customerName: name,
           source: "WEB",
-          deliveryAddress: orderType === "PICKUP" ? null : { street, number, neighborhood },
+          deliveryAddress: orderType === "PICKUP" ? null : { street, number, neighborhood, complement },
           notes: `Pagamento: ${payment}${specialNotes ? ` | Obs: ${specialNotes}` : ""}`,
           items: cart.map((i) => ({
             productId: i.product.id,
@@ -591,14 +592,23 @@ export default function CardapioView({
                     className="col-span-1 bg-white border border-[#EBE2D5] text-[#2E251B] placeholder-slate-400 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-600"
                   />
                 </div>
-                <input
-                  type="text"
-                  required
-                  placeholder="Bairro"
-                  value={neighborhood}
-                  onChange={(e) => setNeighborhood(e.target.value)}
-                  className="w-full bg-white border border-[#EBE2D5] text-[#2E251B] placeholder-slate-400 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-600"
-                />
+                <div className="grid grid-cols-2 gap-3">
+                  <input
+                    type="text"
+                    required
+                    placeholder="Bairro"
+                    value={neighborhood}
+                    onChange={(e) => setNeighborhood(e.target.value)}
+                    className="col-span-1 bg-white border border-[#EBE2D5] text-[#2E251B] placeholder-slate-400 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-600"
+                  />
+                  <input
+                    type="text"
+                    placeholder="Complemento (Opcional)"
+                    value={complement}
+                    onChange={(e) => setComplement(e.target.value)}
+                    className="col-span-1 bg-white border border-[#EBE2D5] text-[#2E251B] placeholder-slate-400 rounded-lg px-4 py-3 text-sm focus:outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-600"
+                  />
+                </div>
               </div>
               )}
 
@@ -640,17 +650,19 @@ export default function CardapioView({
               </div>
 
               {/* Order total info */}
-              {deliveryFeeValue > 0 && (
-                <div className="border-t border-[#EBE2D5] pt-4 flex justify-between items-center text-[#6B5A4B] text-sm">
-                  <span>Subtotal</span>
-                  <span className="font-semibold">R$ {cartTotal.toFixed(2)}</span>
-                </div>
-              )}
-              {deliveryFeeValue > 0 && (
-                <div className="flex justify-between items-center text-[#6B5A4B] text-sm">
-                  <span>Taxa de entrega</span>
-                  <span className="font-semibold">R$ {deliveryFeeValue.toFixed(2)}</span>
-                </div>
+              {orderType === "DELIVERY" && (
+                <>
+                  <div className="border-t border-[#EBE2D5] pt-4 flex justify-between items-center text-[#6B5A4B] text-sm">
+                    <span>Subtotal</span>
+                    <span className="font-semibold">R$ {cartTotal.toFixed(2)}</span>
+                  </div>
+                  <div className="flex justify-between items-center text-[#6B5A4B] text-sm">
+                    <span>Taxa de entrega</span>
+                    <span className="font-semibold">
+                      {deliveryFee > 0 ? `R$ ${deliveryFee.toFixed(2)}` : "Grátis (R$ 0,00)"}
+                    </span>
+                  </div>
+                </>
               )}
               <div className="border-t border-[#EBE2D5] pt-4 flex justify-between items-center">
                 <span className="font-bold text-amber-950 font-serif">Total a Pagar</span>

@@ -26,9 +26,9 @@ export class IntentRouter {
           session.state = BotState.SHOW_MENU;
           await SessionService.saveSession(session);
           const menuUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-          return { 
-            bypassed: true, 
-            reply: `Olá! Bem-vindo(a) à Sabor de Minas! 😊 O que você gostaria de pedir hoje? Se preferir, você pode pedir pelo nosso cardápio online: ${menuUrl}/cardapio` 
+          return {
+            bypassed: true,
+            reply: `Olá! Bem-vindo(a) à Sabor de Minas! 😊 O que você gostaria de pedir hoje? Se preferir, você pode pedir pelo nosso cardápio online: ${menuUrl}/cardapio`
           };
         }
         break;
@@ -56,11 +56,11 @@ export class IntentRouter {
           session.payment = message.trim();
           session.state = BotState.CONFIRM_ORDER;
           await SessionService.saveSession(session);
-          
+
           const itemsText = session.order.items.map(i => `${i.quantity}x ${i.name}`).join("\n");
-          return { 
-            bypassed: true, 
-            reply: `Quase lá! Confirme seu pedido:\n\nItens:\n${itemsText}\n\nTotal: R$ ${session.order.total.toFixed(2)}\nEndereço: ${session.customer.address}\nPagamento: ${session.payment}\n\nResponda "confirmar" para enviar o pedido.` 
+          return {
+            bypassed: true,
+            reply: `Quase lá! Confirme seu pedido:\n\nItens:\n${itemsText}\n\nTotal: R$ ${session.order.total.toFixed(2)}\nEndereço: ${session.customer.address}\nPagamento: ${session.payment}\n\nResponda "confirmar" para enviar o pedido.`
           };
         }
         break;
@@ -79,7 +79,7 @@ export class IntentRouter {
           }
         }
         break;
-      
+
       case BotState.FINISHED:
       case BotState.CANCELLED:
         // Restart flow
@@ -93,7 +93,7 @@ export class IntentRouter {
 
     // 3. Guard Rails (Não-Bypass, apenas mutação de estado antes do LLM)
     let stateChanged = false;
-    
+
     // Classificação de tipo de pedido precoce
     if (!session.orderType) {
       if (/\b(entrega|delivery)\b/i.test(text)) {
@@ -122,9 +122,9 @@ export class IntentRouter {
     const isMenuRequest = /^(menu|cardapio|cardápio|o que tem|opções|opcoes|ver cardapio|qual o cardápio)$/i.test(text);
     if (isMenuRequest) {
       const menuUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/+$/, "");
-      return { 
-        bypassed: true, 
-        reply: `Aqui está o nosso cardápio completo: ${menuUrl}/cardapio 😊 Dá para escolher tudo por lá, ou me pedir por aqui mesmo!` 
+      return {
+        bypassed: true,
+        reply: `Aqui está o nosso cardápio completo: ${menuUrl}/cardapio 😊 Dá para escolher tudo por lá, ou me pedir por aqui mesmo!`
       };
     }
 

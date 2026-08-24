@@ -1,4 +1,4 @@
-import { formatOrderNumber } from "./format-order";
+import { formatOrderNumber, parseOrderNotes } from "./format-order";
 
 interface OrderItem {
   id: string;
@@ -31,6 +31,7 @@ export interface PrintableOrder {
     street?: string;
     number?: string;
     neighborhood?: string;
+    complement?: string;
   } | null;
   notes: string | null;
   createdAt: string;
@@ -62,7 +63,7 @@ export function printReceipt80mm(order: PrintableOrder): void {
 
   const addressText = order.deliveryAddress
     ? order.deliveryAddress.fullAddress ||
-      `${order.deliveryAddress.street || ""}, ${order.deliveryAddress.number || ""} - ${order.deliveryAddress.neighborhood || ""}`.trim()
+      `${order.deliveryAddress.street || ""}, ${order.deliveryAddress.number || ""} - ${order.deliveryAddress.neighborhood || ""}${order.deliveryAddress.complement ? ` (${order.deliveryAddress.complement})` : ""}`.trim()
     : "Retirada no Balcão";
 
   const itemsHtml = order.items
@@ -89,14 +90,14 @@ export function printReceipt80mm(order: PrintableOrder): void {
     .join("");
 
   const formattedTotal = order.total.toFixed(2).replace(".", ",");
-  const paymentMethod = order.notes || "Não informado";
+  const { paymentMethod, observations } = parseOrderNotes(order.notes);
 
   const receiptHtml = `
     <!DOCTYPE html>
     <html lang="pt-BR">
     <head>
       <meta charset="UTF-8">
-      <title>Comprovante #${shortId}</title>
+      <title>Comprovante ${shortId}</title>
       <style>
         @page {
           size: 80mm auto;
@@ -186,7 +187,7 @@ export function printReceipt80mm(order: PrintableOrder): void {
       <div class="divider-double"></div>
 
       <div class="info-row">
-        <span><strong>PEDIDO:</strong> #${shortId}</span>
+        <span><strong>PEDIDO:</strong> ${shortId}</span>
         <span><strong>CANAL:</strong> ${sourceLabel}</span>
       </div>
       <div class="info-row">
@@ -224,11 +225,20 @@ export function printReceipt80mm(order: PrintableOrder): void {
           <span>Forma de Pagamento:</span>
           <span style="font-weight: bold;">${paymentMethod}</span>
         </div>
-        ${(order.deliveryFee ?? 0) > 0 ? `
-        <div class="total-row">
-          <span>TAXA DE ENTREGA:</span>
-          <span>R$ ${(order.deliveryFee ?? 0).toFixed(2).replace(".", ",")}</span>
+        ${observations ? `
+        <div class="info-row" style="margin-top: 3px; display: flex; flex-direction: column; align-items: flex-start;">
+          <span style="font-size: 11px;"><strong>Obs:</strong> ${observations}</span>
         </div>` : ""}
+        ${order.deliveryAddress ? `
+        <div class="info-row" style="margin-top: 4px;">
+          <span>Subtotal:</span>
+          <span>R$ ${(order.total - (order.deliveryFee ?? 0)).toFixed(2).replace(".", ",")}</span>
+        </div>
+        <div class="info-row">
+          <span>Taxa de Entrega:</span>
+          <span>R$ ${(order.deliveryFee ?? 0).toFixed(2).replace(".", ",")}</span>
+        </div>
+        ` : ""}
         <div class="divider"></div>
         <div class="total-row">
           <span>VALOR TOTAL:</span>
