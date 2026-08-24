@@ -53,7 +53,7 @@ model BotSetting {
   sessionTimeout      Int         @default(1800) @map("session_timeout") // 30 min default
   messageContextLimit Int         @default(15) @map("message_context_limit")
   maxOutputTokens     Int         @default(4096) @map("max_output_tokens")
-  temperature         Float       @default(0.7) @map("temperature")
+  temperature         Float       @default(0.2) @map("temperature")
   thinkingConfig      String?     @map("thinking_config")
   isActive            Boolean     @default(true) @map("is_active")
 

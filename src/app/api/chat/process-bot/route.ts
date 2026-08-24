@@ -124,10 +124,10 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
     // Only classify delivery/pickup/order-type in the initial messages of the conversation
     const isInitial = session.state === BotState.START || session.state === BotState.SHOW_MENU;
 
-    // 3. Intent Router (Business Rules bypass)
     const routerResponse = await IntentRouter.route(fullMessage, session);
 
     let finalBotText = routerResponse.reply || "";
+    let compressedContext = finalBotText;
 
     if (!routerResponse.bypassed) {
       // Encomenda é decisão determinística (palavra-chave), não depende do LLM
@@ -224,11 +224,18 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
               ...p,
               id: idMap.get(p.id) || p.id, // Resolve short ID to UUID, fallback to original
             }));
+            
+            // Validação anti-alucinação: remove IDs que não existem no banco
+            const validProducts = mappedProducts.filter(p => products.some(prod => prod.id === p.id));
+            if (validProducts.length !== mappedProducts.length) {
+              console.warn(`[Bot Process] LLM inventou ${mappedProducts.length - validProducts.length} produto(s) inexistente(s). Filtrando.`);
+            }
+            
             // Items are added silently: confirmation appears only in the final order summary,
             // never as a machine line after each addition. A stale active order
             // (DISPATCHED/READY/DELIVERED/CANCELLED) is released internally, so items
             // simply start a new cart instead of being refused.
-            await OrdersService.updateOrderItems(session, mappedProducts);
+            await OrdersService.updateOrderItems(session, validProducts);
           }
 
           // 3. Handle specific intents
@@ -273,6 +280,17 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
             }
             await SessionService.clearSession(session.tenantId, session.customerId);
           }
+          
+          compressedContext = JSON.stringify({
+            intent: agentResponse.intent,
+            cart: session.order.items.map(i => `${i.quantity}x ${i.name}`),
+            customerInfo: {
+              name: session.customer.name || "",
+              address: session.customer.address || "",
+              payment: session.payment || ""
+            },
+            botMessage: finalBotText.substring(0, 150)
+          });
         } // else: normal bot flow (skip order processing for ENCOMENDA)
       } // else: caminho LLM (encomenda por palavra-chave já tratada acima)
     }
@@ -280,7 +298,7 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
     // 5. Append interaction to context
     const ctxLimit = Math.max(10, (botSetting.messageContextLimit ?? 10) * 2);
     await SessionService.appendContext(session, "user", fullMessage, ctxLimit);
-    await SessionService.appendContext(session, "assistant", finalBotText, ctxLimit);
+    await SessionService.appendContext(session, "assistant", compressedContext, ctxLimit);
 
     // Release Lock
     await MessageBuffer.releaseLock(customer.tenantId, customerId);

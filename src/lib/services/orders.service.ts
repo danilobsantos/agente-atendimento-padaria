@@ -45,17 +45,39 @@ export class OrdersService {
     // land in a fresh cart instead of mutating a finished order.
     await SessionService.releaseStaleActiveOrder(session);
 
+    let itemsToProcess = newItems;
+
+    // Anti-Drop Heuristic (Cart Merge Protetor)
+    const existingIds = new Set(session.order.items.map(i => i.productId));
+    const newIds = new Set(newItems.map(i => i.id));
+    
+    if (existingIds.size > 0) {
+      const intersection = [...existingIds].filter(id => newIds.has(id));
+      // Se o LLM retornou APENAS itens novos (intersecção vazia) e não ecoou o carrinho atual,
+      // ele agiu como 'appender'. Vamos preservar os itens existentes para evitar perda.
+      if (intersection.length === 0) {
+        console.warn(`[OrdersService] LLM retornou 0 itens do carrinho atual. Acionando Cart Merge protetor.`);
+        const preservedItems = session.order.items.map(i => ({
+          id: i.productId,
+          quantity: i.quantity,
+          notes: i.notes,
+          additionalItems: i.additionalItems?.map(a => ({ id: a.id, name: a.name, price: a.price }))
+        }));
+        itemsToProcess = [...preservedItems, ...newItems];
+      }
+    }
+
     // Resolve complements once for the whole batch
     const extraByItem = await Promise.all(
-      newItems.map(i => OrdersService.resolveAdditionalItems(session.tenantId, i.additionalItems || []))
+      itemsToProcess.map(i => OrdersService.resolveAdditionalItems(session.tenantId, i.additionalItems || []))
     );
 
     // products = the AUTHORITATIVE full cart (per prompt rule 1); REPLACE, not accumulate.
     const resolved: OrderItemState[] = [];
     const addedDescriptions: string[] = [];
 
-    for (let i = 0; i < newItems.length; i++) {
-      const newItem = newItems[i];
+    for (let i = 0; i < itemsToProcess.length; i++) {
+      const newItem = itemsToProcess[i];
       const product = await ProductsService.getProductById(session.tenantId, newItem.id);
       if (!product) continue;
 

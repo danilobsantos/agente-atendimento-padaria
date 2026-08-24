@@ -90,6 +90,43 @@ export class IntentRouter {
         return { bypassed: true, reply: "Olá novamente! Em que posso ajudar hoje?" };
     }
 
+    // 3. Guard Rails (Não-Bypass, apenas mutação de estado antes do LLM)
+    let stateChanged = false;
+    
+    // Classificação de tipo de pedido precoce
+    if (!session.orderType) {
+      if (/\b(entrega|delivery)\b/i.test(text)) {
+        session.orderType = "DELIVERY";
+        stateChanged = true;
+      } else if (/\b(retirada|buscar|balcão|balcao|aqui)\b/i.test(text)) {
+        session.orderType = "PICKUP";
+        stateChanged = true;
+      }
+    }
+
+    // Classificação de pagamento precoce
+    if (!session.payment) {
+      const paymentMatch = text.match(/\b(pix|dinheiro|cartão|cartao)\b/i);
+      if (paymentMatch) {
+        session.payment = paymentMatch[0].toUpperCase() === "CARTAO" ? "CARTÃO" : paymentMatch[0].toUpperCase();
+        stateChanged = true;
+      }
+    }
+
+    if (stateChanged) {
+      await SessionService.saveSession(session);
+    }
+
+    // Bypass total se for apenas pedido de cardápio
+    const isMenuRequest = /^(menu|cardapio|cardápio|o que tem|opções|opcoes|ver cardapio|qual o cardápio)$/i.test(text);
+    if (isMenuRequest) {
+      const menuUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/+$/, "");
+      return { 
+        bypassed: true, 
+        reply: `Aqui está o nosso cardápio completo: ${menuUrl}/cardapio 😊 Dá para escolher tudo por lá, ou me pedir por aqui mesmo!` 
+      };
+    }
+
     // Return bypassed: false if we couldn't resolve the intent locally
     // This will trigger the LLM
     return { bypassed: false };
