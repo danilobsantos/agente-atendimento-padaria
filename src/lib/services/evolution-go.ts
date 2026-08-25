@@ -1,3 +1,5 @@
+import { prisma } from "@/lib/prisma";
+
 interface SendTextParams {
   number: string;
   text: string;
@@ -202,7 +204,6 @@ export const evolutionGo = new EvolutionGoService();
 
 export async function getEvolutionServiceForTenant(tenantId: string): Promise<EvolutionGoService> {
   try {
-    const { prisma } = await import("@/lib/prisma");
     const botSetting = await prisma.botSetting.findUnique({
       where: { tenantId },
     });
