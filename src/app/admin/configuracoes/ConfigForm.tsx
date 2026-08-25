@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { Save, CheckCircle2, AlertCircle } from "lucide-react";
+import { Save, CheckCircle2, AlertCircle, Smartphone } from "lucide-react";
 
 interface Settings {
   tenantId: string;
@@ -16,6 +16,8 @@ interface Settings {
   temperature: number;
   thinkingConfig?: string | null;
   isActive: boolean;
+  evolutionInstanceName?: string | null;
+  evolutionInstanceToken?: string | null;
 }
 
 export default function ConfigForm({ initialSettings }: { initialSettings: Settings }) {
@@ -30,6 +32,8 @@ export default function ConfigForm({ initialSettings }: { initialSettings: Setti
   const [temperature, setTemperature] = useState(initialSettings.temperature ?? 0.7);
   const [thinkingConfig, setThinkingConfig] = useState(initialSettings.thinkingConfig || "");
   const [isActive, setIsActive] = useState(initialSettings.isActive);
+  const [evolutionInstanceName, setEvolutionInstanceName] = useState(initialSettings.evolutionInstanceName || "");
+  const [evolutionInstanceToken, setEvolutionInstanceToken] = useState(initialSettings.evolutionInstanceToken || "");
 
   const [isSaving, setIsSaving] = useState(false);
   const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -66,6 +70,8 @@ export default function ConfigForm({ initialSettings }: { initialSettings: Setti
           temperature,
           thinkingConfig,
           isActive,
+          evolutionInstanceName,
+          ...(evolutionInstanceToken && evolutionInstanceToken !== "••••••••" && { evolutionInstanceToken }),
         }),
       });
 
@@ -340,6 +346,57 @@ export default function ConfigForm({ initialSettings }: { initialSettings: Setti
                 }`}
             />
           </button>
+        </div>
+      </div>
+
+      {/* Evolution API Multi-Tenant Settings */}
+      <div className="bg-white border border-[#EBE2D5] rounded-2xl p-6 space-y-6 shadow-[0_4px_24px_rgba(46,37,27,0.02)]">
+        <div className="flex items-center gap-3 border-b border-[#FAF7F2] pb-3">
+          <div className="bg-[#FAF7F2] p-2 rounded-xl border border-[#EBE2D5]">
+            <Smartphone className="h-5 w-5 text-amber-700" />
+          </div>
+          <div>
+            <h2 className="text-lg font-serif font-bold text-amber-950">
+              Instância WhatsApp (Evolution Go)
+            </h2>
+            <p className="text-xs text-[#6B5A4B] font-light">
+              Defina o nome da instância e o token de autenticação dedicados a esta empresa. Deixe em branco para usar a configuração padrão do servidor.
+            </p>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-[#6B5A4B] uppercase tracking-wider block">
+              Nome da Instância
+            </label>
+            <input
+              type="text"
+              value={evolutionInstanceName}
+              onChange={(e) => setEvolutionInstanceName(e.target.value)}
+              placeholder="ex: padaria-matriz"
+              className="w-full bg-[#FAF7F2] border border-[#EBE2D5] text-[#2E251B] placeholder-[#A09384] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-600"
+            />
+            <p className="text-xs text-[#8C7A6B]">
+              Nome da instância cadastrada na Evolution Go para este tenant.
+            </p>
+          </div>
+
+          <div className="space-y-1.5">
+            <label className="text-[11px] font-bold text-[#6B5A4B] uppercase tracking-wider block">
+              Token da Instância
+            </label>
+            <input
+              type="password"
+              value={evolutionInstanceToken}
+              onChange={(e) => setEvolutionInstanceToken(e.target.value)}
+              placeholder="••••••••"
+              className="w-full bg-[#FAF7F2] border border-[#EBE2D5] text-[#2E251B] placeholder-[#A09384] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-600"
+            />
+            <p className="text-xs text-[#8C7A6B]">
+              Token de segurança da instância usado para chamadas da API.
+            </p>
+          </div>
         </div>
       </div>
 

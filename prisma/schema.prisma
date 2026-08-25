@@ -57,6 +57,9 @@ model BotSetting {
   thinkingConfig      String?     @map("thinking_config")
   isActive            Boolean     @default(true) @map("is_active")
 
+  evolutionInstanceName  String?     @map("evolution_instance_name")
+  evolutionInstanceToken String?     @map("evolution_instance_token")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -227,6 +230,11 @@ model OrderItem {
 
 // ─── Usuários (Users) ────────────────────────────────────────
 
+enum UserRole {
+  ADMIN
+  USER
+}
+
 model User {
   id       String @id @default(uuid())
   tenantId String @map("tenant_id")
@@ -235,6 +243,7 @@ model User {
   email        String   @unique
   passwordHash String   @map("password_hash")
   name         String?
+  role         UserRole @default(ADMIN)
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 

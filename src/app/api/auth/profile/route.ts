@@ -93,10 +93,11 @@ export async function PATCH(request: Request) {
     tenantId: updated.tenantId,
     email: updated.email,
     name: updated.name,
+    role: updated.role,
   });
 
   const response = NextResponse.json({
-    user: { id: updated.id, email: updated.email, name: updated.name },
+    user: { id: updated.id, email: updated.email, name: updated.name, role: updated.role },
   });
   response.headers.set(
     "Set-Cookie",

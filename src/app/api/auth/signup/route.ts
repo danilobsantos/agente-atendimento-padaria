@@ -86,6 +86,7 @@ export async function POST(request: Request) {
       tenantId: result.tenant.id,
       email: result.user.email,
       name: result.user.name,
+      role: result.user.role,
     });
 
     // Set HTTP-Only session cookie
@@ -94,6 +95,7 @@ export async function POST(request: Request) {
         id: result.user.id,
         email: result.user.email,
         name: result.user.name,
+        role: result.user.role,
       },
       tenant: {
         id: result.tenant.id,

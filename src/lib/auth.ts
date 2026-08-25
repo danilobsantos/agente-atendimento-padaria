@@ -9,6 +9,7 @@ export interface JWTPayload {
   tenantId: string;
   email: string;
   name?: string | null;
+  role?: "ADMIN" | "USER";
 }
 
 export async function signJWT(payload: JWTPayload): Promise<string> {

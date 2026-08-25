@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import CardapioView from "./CardapioView";
 import { getAuthUser } from "@/lib/utils/auth-route";
+import { headers } from "next/headers";
 
 export const dynamic = "force-dynamic";
 
@@ -10,8 +11,10 @@ interface CardapioPageProps {
 
 export default async function CardapioPage({ searchParams }: CardapioPageProps) {
   const resolvedParams = searchParams ? await searchParams : undefined;
+  const headerList = await headers();
+  const subdomainTenant = headerList.get("x-tenant-slug");
   const authUser = await getAuthUser();
-  const tenantSlugOrId = resolvedParams?.tenant || authUser?.tenantId;
+  const tenantSlugOrId = resolvedParams?.tenant || subdomainTenant || authUser?.tenantId;
 
   let tenant = null;
 

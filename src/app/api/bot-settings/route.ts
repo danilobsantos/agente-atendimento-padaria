@@ -18,10 +18,11 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Bot settings not found" }, { status: 404 });
   }
 
-  // Never expose the full API key to the frontend
+  // Never expose the full API key or token to the frontend
   return NextResponse.json({
     ...settings,
     llmApiKey: settings.llmApiKey ? "••••" + settings.llmApiKey.slice(-4) : "",
+    evolutionInstanceToken: settings.evolutionInstanceToken ? "••••••••" : "",
   });
 }
 
@@ -42,6 +43,8 @@ export async function PUT(request: Request) {
       temperature,
       thinkingConfig,
       isActive,
+      evolutionInstanceName,
+      evolutionInstanceToken,
     } = body;
 
     if (!tenantId) {
@@ -62,6 +65,8 @@ export async function PUT(request: Request) {
         ...(temperature !== undefined && { temperature: parseFloat(temperature) }),
         ...(thinkingConfig !== undefined && { thinkingConfig: thinkingConfig ? String(thinkingConfig) : null }),
         ...(isActive !== undefined && { isActive }),
+        ...(evolutionInstanceName !== undefined && { evolutionInstanceName: evolutionInstanceName?.trim() || null }),
+        ...(evolutionInstanceToken !== undefined && evolutionInstanceToken !== "" && { evolutionInstanceToken: evolutionInstanceToken.trim() }),
       },
       create: {
         tenantId,
@@ -76,12 +81,15 @@ export async function PUT(request: Request) {
         temperature: temperature ? parseFloat(temperature) : 0.7,
         ...(thinkingConfig !== undefined && { thinkingConfig: thinkingConfig ? String(thinkingConfig) : null }),
         isActive: isActive ?? true,
+        evolutionInstanceName: evolutionInstanceName?.trim() || null,
+        evolutionInstanceToken: evolutionInstanceToken?.trim() || null,
       },
     });
 
     return NextResponse.json({
       ...settings,
       llmApiKey: settings.llmApiKey ? "••••" + settings.llmApiKey.slice(-4) : "",
+      evolutionInstanceToken: settings.evolutionInstanceToken ? "••••••••" : "",
     });
   } catch (error: any) {
     console.error("[BotSettings] Error:", error);
