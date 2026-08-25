@@ -8,8 +8,28 @@ const SECRET_KEY = new TextEncoder().encode(
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+  const host = request.headers.get("host") || "";
+  const hostname = host.split(":")[0];
 
-  // Only protect routes inside /admin
+  // 1. Detect Subdomain
+  let subdomain: string | null = null;
+  const parts = hostname.split(".");
+  if (hostname.endsWith(".localhost") && parts.length === 2) {
+    subdomain = parts[0];
+  } else if (parts.length > 2) {
+    const candidate = parts[0].toLowerCase();
+    if (!["www", "app", "api"].includes(candidate)) {
+      subdomain = candidate;
+    }
+  }
+
+  // Clone headers so we can set x-tenant-slug
+  const requestHeaders = new Headers(request.headers);
+  if (subdomain) {
+    requestHeaders.set("x-tenant-slug", subdomain);
+  }
+
+  // 2. Protect Admin Routes
   if (pathname.startsWith("/admin")) {
     const token = request.cookies.get("auth_token")?.value;
 
@@ -20,24 +40,62 @@ export async function middleware(request: NextRequest) {
     }
 
     try {
-      // Verify token in Middleware (jose is fully Edge/Middleware safe)
-      await jwtVerify(token, SECRET_KEY);
-      return NextResponse.next();
+      const { payload } = await jwtVerify(token, SECRET_KEY);
+      const role = (payload as any).role || "USER";
+
+      // Restrict access to /admin/configuracoes and /admin/usuarios for non-admin users
+      if (
+        (pathname.startsWith("/admin/configuracoes") ||
+          pathname.startsWith("/admin/usuarios")) &&
+        role !== "ADMIN"
+      ) {
+        return NextResponse.redirect(new URL("/admin", request.url));
+      }
+
+      return NextResponse.next({
+        request: {
+          headers: requestHeaders,
+        },
+      });
     } catch {
-      // If validation fails, clear token and redirect to login
       const loginUrl = new URL("/login", request.url);
       loginUrl.searchParams.set("callbackUrl", pathname);
-      
+
       const response = NextResponse.redirect(loginUrl);
       response.cookies.delete("auth_token");
       return response;
     }
   }
 
-  return NextResponse.next();
+  // 3. Subdomain root rewrite: if visiting tenant subdomain on "/", rewrite to /cardapio
+  if (subdomain && pathname === "/") {
+    const cardapioUrl = new URL("/cardapio", request.url);
+    cardapioUrl.searchParams.set("tenant", subdomain);
+    return NextResponse.rewrite(cardapioUrl, {
+      request: {
+        headers: requestHeaders,
+      },
+    });
+  }
+
+  return NextResponse.next({
+    request: {
+      headers: requestHeaders,
+    },
+  });
 }
 
-// Configure which paths middleware runs on
 export const config = {
-  matcher: ["/admin/:path*"],
+  matcher: [
+    /*
+     * Match all request paths except for the ones starting with:
+     * - api (API routes, handled separately)
+     * - _next/static (static files)
+     * - _next/image (image optimization files)
+     * - uploads (uploaded files)
+     * - favicon.ico (favicon file)
+     */
+    "/((?!api|_next/static|_next/image|uploads|favicon.ico).*)",
+  ],
 };
+

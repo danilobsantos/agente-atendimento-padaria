@@ -1,3 +1,5 @@
+import { prisma } from "@/lib/prisma";
+
 interface SendTextParams {
   number: string;
   text: string;
@@ -199,3 +201,22 @@ export class EvolutionGoService {
 }
 
 export const evolutionGo = new EvolutionGoService();
+
+export async function getEvolutionServiceForTenant(tenantId: string): Promise<EvolutionGoService> {
+  try {
+    const botSetting = await prisma.botSetting.findUnique({
+      where: { tenantId },
+    });
+
+    if (botSetting?.evolutionInstanceName || botSetting?.evolutionInstanceToken) {
+      return new EvolutionGoService({
+        instanceName: botSetting.evolutionInstanceName || undefined,
+        instanceToken: botSetting.evolutionInstanceToken || undefined,
+      });
+    }
+  } catch (err) {
+    console.error("[EvolutionGo] Error loading tenant specific config:", err);
+  }
+
+  return evolutionGo;
+}

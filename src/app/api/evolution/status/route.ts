@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthUser } from "@/lib/utils/auth-route";
-import { evolutionGo } from "@/lib/services/evolution-go";
+import { getEvolutionServiceForTenant } from "@/lib/services/evolution-go";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +12,8 @@ export async function GET() {
   }
 
   try {
-    const status = await evolutionGo.getStatus();
+    const evolutionService = await getEvolutionServiceForTenant(user.tenantId);
+    const status = await evolutionService.getStatus();
     return NextResponse.json(status);
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : String(error);

@@ -1,20 +1,15 @@
-import { prisma } from "@/lib/prisma";
+import { getAuthUser } from "@/lib/utils/auth-route";
 import KanbanContainer from "./KanbanContainer";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminDashboard() {
-  const tenant = await prisma.tenant.findFirst({
-    where: { active: true },
-  });
+  const user = await getAuthUser();
 
-  if (!tenant) {
-    return (
-      <div className="flex-1 flex items-center justify-center text-[#8C7A6B] bg-[#FAF7F2]">
-        Nenhum Tenant (Padaria) cadastrado. Rode o seed no banco de dados.
-      </div>
-    );
+  if (!user) {
+    redirect("/login");
   }
 
-  return <KanbanContainer tenantId={tenant.id} />;
+  return <KanbanContainer tenantId={user.tenantId} />;
 }

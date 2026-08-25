@@ -1,4 +1,4 @@
-import { evolutionGo } from "../services/evolution-go";
+import { getEvolutionServiceForTenant } from "../services/evolution-go";
 import { prisma } from "../prisma";
 import { redisChannel, redisPub } from "../redis";
 
@@ -81,13 +81,14 @@ export async function sendChunkedResponse(params: SendChunkedParams): Promise<vo
     return;
   }
   const chunks = splitMessage(text.trim());
+  const evolutionService = await getEvolutionServiceForTenant(tenantId);
 
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
 
     // Show "typing..." before each chunk (except the first, which already has it)
     if (i > 0) {
-      await evolutionGo.sendPresence(phone, "composing").catch(() => {});
+      await evolutionService.sendPresence(phone, "composing").catch(() => {});
       await delay(DELAY_BETWEEN_CHUNKS_MS);
     }
 
@@ -113,10 +114,11 @@ export async function sendChunkedResponse(params: SendChunkedParams): Promise<vo
 
     // Send via WhatsApp
     try {
-      await evolutionGo.sendText({ number: phone, text: chunk });
+      await evolutionService.sendText({ number: phone, text: chunk });
     } catch (e: any) {
       console.error(`[sendChunkedResponse] sendText FAILED for phone="${phone}" (len=${phone.length}):`, e?.message || e);
       throw e;
     }
   }
 }
+

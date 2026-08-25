@@ -110,8 +110,9 @@ export async function POST(request: Request) {
       );
 
       // Send message via Evolution Go
-      const { evolutionGo } = await import("@/lib/services/evolution-go");
-      await evolutionGo.sendText({
+      const { getEvolutionServiceForTenant } = await import("@/lib/services/evolution-go");
+      const evolutionService = await getEvolutionServiceForTenant(customer.tenantId);
+      await evolutionService.sendText({
         number: customer.phone,
         text: content,
       });

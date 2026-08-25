@@ -21,6 +21,7 @@ export async function GET() {
       id: payload.userId,
       email: payload.email,
       name: payload.name,
+      role: payload.role || "USER",
     },
     tenantId: payload.tenantId,
   });

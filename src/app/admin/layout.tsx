@@ -11,6 +11,7 @@ import {
   Coffee,
   LogOut,
   User,
+  Users,
   Building2,
   Menu,
   X,
@@ -43,6 +44,7 @@ export default function AdminLayout({
   const [tenantId, setTenantId] = useState<string | null>(null);
   const [tenantName, setTenantName] = useState<string>("SABOR DE MINAS");
   const [tenantLogoUrl, setTenantLogoUrl] = useState<string | null>(null);
+  const [userRole, setUserRole] = useState<string>("ADMIN");
   const [toasts, setToasts] = useState<ToastData[]>([]);
   const [encomendaToasts, setEncomendaToasts] = useState<EncomendaToastData[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
@@ -104,7 +106,21 @@ export default function AdminLayout({
         console.error("Error loading company data for layout:", err);
       }
     }
+
+    async function loadUserData() {
+      try {
+        const res = await fetch("/api/auth/me");
+        if (res.ok) {
+          const data = await res.json();
+          if (data.user?.role) setUserRole(data.user.role);
+        }
+      } catch (err) {
+        console.error("Error loading user data for layout:", err);
+      }
+    }
+
     loadCompanyData();
+    loadUserData();
   }, []);
 
   const { socket } = useSocket(tenantId || "");
@@ -225,7 +241,12 @@ export default function AdminLayout({
     { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
     { href: "/admin/chat", label: "Live Chat", icon: MessageSquare },
     { href: "/admin/cardapio", label: "Cardápio", icon: Utensils },
-    { href: "/admin/configuracoes", label: "Configurações IA", icon: Settings },
+    ...(userRole === "ADMIN"
+      ? [
+          { href: "/admin/configuracoes", label: "Configurações IA", icon: Settings },
+          { href: "/admin/usuarios", label: "Usuários", icon: Users },
+        ]
+      : []),
     { href: "/admin/empresa", label: "Empresa", icon: Building2 },
     { href: "/admin/perfil", label: "Meu Perfil", icon: User },
   ];

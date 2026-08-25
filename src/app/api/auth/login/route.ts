@@ -51,6 +51,7 @@ export async function POST(request: Request) {
       tenantId: user.tenantId,
       email: user.email,
       name: user.name,
+      role: user.role,
     });
 
     // Set cookie
@@ -59,6 +60,7 @@ export async function POST(request: Request) {
         id: user.id,
         email: user.email,
         name: user.name,
+        role: user.role,
       },
       tenant: {
         id: user.tenant.id,

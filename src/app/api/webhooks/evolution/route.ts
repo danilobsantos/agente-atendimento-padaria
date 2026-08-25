@@ -100,11 +100,34 @@ export async function POST(request: Request) {
       return NextResponse.json({ status: "no_text" });
     }
 
-    // For now, use the first active tenant (single-tenant mode)
-    // In SaaS mode, this would be resolved by the Evolution instance → tenant mapping
-    const tenant = await prisma.tenant.findFirst({
-      where: { active: true },
-    });
+    // Resolve tenant dynamically by Evolution instance name
+    const instanceName =
+      payload.instance ||
+      payload.instanceName ||
+      payload.data?.instance ||
+      payload.data?.instanceName ||
+      payload.data?.Info?.InstanceName;
+
+    let tenant = null;
+    if (instanceName && typeof instanceName === "string") {
+      const setting = await prisma.botSetting.findFirst({
+        where: {
+          evolutionInstanceName: instanceName,
+          tenant: { active: true },
+        },
+        include: { tenant: true },
+      });
+      if (setting?.tenant) {
+        tenant = setting.tenant;
+      }
+    }
+
+    // Fallback to first active tenant if no specific instance matched
+    if (!tenant) {
+      tenant = await prisma.tenant.findFirst({
+        where: { active: true },
+      });
+    }
 
     if (!tenant) {
       return NextResponse.json({ error: "No active tenant" }, { status: 404 });
