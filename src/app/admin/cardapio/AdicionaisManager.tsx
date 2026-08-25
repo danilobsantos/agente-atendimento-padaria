@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Plus, Edit2, Trash2, Loader2, X, Check, AlertCircle, Sparkles } from "lucide-react";
+import { Plus, Edit2, Trash2, Loader2, X, Check, AlertCircle, Sparkles, Search } from "lucide-react";
 
 interface Category {
   id: string;
@@ -21,6 +21,7 @@ interface AdditionalItem {
 export default function AdicionaisManager({ tenantId }: { tenantId: string }) {
   const [items, setItems] = useState<AdditionalItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
+  const [searchTerm, setSearchTerm] = useState("");
   const [isLoading, setIsLoading] = useState(true);
   const [isSubmitLoading, setIsSubmitLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -168,6 +169,14 @@ export default function AdicionaisManager({ tenantId }: { tenantId: string }) {
     }
   };
 
+  const normalize = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+  const filteredItems = items.filter(
+    (i) =>
+      normalize(i.name).includes(normalize(searchTerm)) ||
+      (i.description && normalize(i.description).includes(normalize(searchTerm))) ||
+      (i.category?.name && normalize(i.category.name).includes(normalize(searchTerm)))
+  );
+
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center">
@@ -184,6 +193,18 @@ export default function AdicionaisManager({ tenantId }: { tenantId: string }) {
         </button>
       </div>
 
+      {/* Filter and Search Bar */}
+      <div className="flex gap-3 max-w-md bg-white border border-[#EBE2D5] rounded-xl px-3.5 py-2.5 items-center shadow-sm w-full">
+        <Search className="h-4 w-4 text-[#8C7A6B] shrink-0" />
+        <input
+          type="text"
+          value={searchTerm}
+          onChange={(e) => setSearchTerm(e.target.value)}
+          placeholder="Buscar adicional por nome, descrição ou categoria..."
+          className="bg-transparent border-none outline-none text-xs sm:text-sm text-[#2E251B] placeholder-[#A09384] w-full"
+        />
+      </div>
+
       {isLoading ? (
         <div className="flex items-center justify-center py-20 gap-2 text-sm text-[#8C7A6B]">
           <Loader2 className="h-5 w-5 animate-spin text-amber-700" />
@@ -192,6 +213,10 @@ export default function AdicionaisManager({ tenantId }: { tenantId: string }) {
       ) : items.length === 0 ? (
         <div className="bg-white border border-[#EBE2D5] rounded-2xl p-12 text-center text-sm text-[#8C7A6B]">
           Nenhum item adicional cadastrado ainda.
+        </div>
+      ) : filteredItems.length === 0 ? (
+        <div className="bg-white border border-[#EBE2D5] rounded-2xl p-12 text-center text-sm text-[#8C7A6B]">
+          Nenhum adicional encontrado para &ldquo;{searchTerm}&rdquo;.
         </div>
       ) : (
         <div className="bg-white border border-[#EBE2D5] rounded-2xl overflow-hidden shadow-sm">
@@ -206,7 +231,7 @@ export default function AdicionaisManager({ tenantId }: { tenantId: string }) {
               </tr>
             </thead>
             <tbody className="divide-y divide-[#FAF7F2] text-sm text-[#2E251B]">
-              {items.map((item) => (
+              {filteredItems.map((item) => (
                 <tr key={item.id} className="hover:bg-[#FAF7F2]/40 transition-colors">
                   <td className="p-4 pl-6">
                     <div className="flex items-center gap-3">

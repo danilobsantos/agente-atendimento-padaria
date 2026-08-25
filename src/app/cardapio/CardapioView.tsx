@@ -1,7 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
-import { Coffee, ShoppingBag, Plus, Minus, X, Check, ArrowRight, MapPin, User, Phone, CreditCard, Search } from "lucide-react";
+import React, { useState, useRef } from "react";
+import { Coffee, ShoppingBag, Plus, Minus, X, Check, ArrowRight, MapPin, User, Phone, CreditCard, Search, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface Category {
   id: string;
@@ -64,6 +64,47 @@ export default function CardapioView({
   const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
   const [isSuccess, setIsSuccess] = useState(false);
   const [search, setSearch] = useState("");
+  const [selectedCategoryId, setSelectedCategoryId] = useState<string | null>(null);
+
+  // Desktop & mobile scroll controls
+  const categoryScrollRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [startX, setStartX] = useState(0);
+  const [scrollLeftState, setScrollLeftState] = useState(0);
+  const [hasDragged, setHasDragged] = useState(false);
+
+  const scrollCategories = (direction: "left" | "right") => {
+    if (categoryScrollRef.current) {
+      const scrollAmount = direction === "left" ? -240 : 240;
+      categoryScrollRef.current.scrollBy({ left: scrollAmount, behavior: "smooth" });
+    }
+  };
+
+  const handleCategoryWheel = (e: React.WheelEvent<HTMLDivElement>) => {
+    if (categoryScrollRef.current && Math.abs(e.deltaY) > Math.abs(e.deltaX)) {
+      categoryScrollRef.current.scrollLeft += e.deltaY;
+    }
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!categoryScrollRef.current) return;
+    setIsDragging(true);
+    setHasDragged(false);
+    setStartX(e.pageX - categoryScrollRef.current.offsetLeft);
+    setScrollLeftState(categoryScrollRef.current.scrollLeft);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isDragging || !categoryScrollRef.current) return;
+    const x = e.pageX - categoryScrollRef.current.offsetLeft;
+    const walk = (x - startX) * 1.5;
+    if (Math.abs(walk) > 5) setHasDragged(true);
+    categoryScrollRef.current.scrollLeft = scrollLeftState - walk;
+  };
+
+  const handleMouseUpOrLeave = () => {
+    setIsDragging(false);
+  };
 
   // Extras selection modal
   const [extraModalProduct, setExtraModalProduct] = useState<Product | null>(null);
@@ -86,9 +127,32 @@ export default function CardapioView({
 
   const normalize = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 
-  const visibleProducts = search.trim()
-    ? products.filter((p) => normalize(p.name).includes(normalize(search)))
-    : products;
+  const productCountByCategory = React.useMemo(() => {
+    const map = new Map<string, number>();
+    for (const p of products) {
+      if (p.categoryId) {
+        map.set(p.categoryId, (map.get(p.categoryId) || 0) + 1);
+      }
+    }
+    return map;
+  }, [products]);
+
+  const visibleProducts = React.useMemo(() => {
+    return products.filter((p) => {
+      // Category filter
+      if (selectedCategoryId && p.categoryId !== selectedCategoryId) {
+        return false;
+      }
+      // Search term filter
+      if (search.trim()) {
+        const query = normalize(search);
+        const matchesName = normalize(p.name).includes(query);
+        const matchesDesc = p.description ? normalize(p.description).includes(query) : false;
+        if (!matchesName && !matchesDesc) return false;
+      }
+      return true;
+    });
+  }, [products, selectedCategoryId, search]);
 
   // Form Fields
   const [name, setName] = useState("");
@@ -239,8 +303,8 @@ export default function CardapioView({
         </button>
       </header>
 
-      {/* 2. Search */}
-      <div className="max-w-3xl mx-auto px-6 pt-6">
+      {/* 2. Search & Filter Bar */}
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 pt-6 pb-2">
         <div className="relative">
           <Search className="h-4 w-4 text-[#6B5A4B] absolute left-4 top-1/2 -translate-y-1/2" />
           <input
@@ -248,26 +312,146 @@ export default function CardapioView({
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar por produto..."
-            className="w-full bg-white border border-[#EBE2D5] text-[#2E251B] placeholder-slate-400 rounded-xl pl-11 pr-4 py-3 text-sm shadow-sm focus:outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-600"
+            className="w-full bg-white border border-[#EBE2D5] text-[#2E251B] placeholder-slate-400 rounded-xl pl-11 pr-10 py-3 text-sm shadow-sm focus:outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-600"
           />
           {search && (
             <button
               onClick={() => setSearch("")}
-              className="absolute right-3 top-1/2 -translate-y-1/2 p-1 rounded-full hover:bg-[#FAF7F2] text-[#6B5A4B] cursor-pointer"
+              className="absolute right-3 top-1/2 -translate-y-1/2 p-1.5 rounded-full hover:bg-[#FAF7F2] text-[#6B5A4B] cursor-pointer"
+              title="Limpar busca"
             >
               <X className="h-4 w-4" />
             </button>
           )}
         </div>
-        {search.trim() && visibleProducts.length === 0 && (
-          <p className="text-center text-sm text-[#6B5A4B] mt-6">
-            Nenhum produto encontrado para "{search.trim()}"
-          </p>
-        )}
       </div>
 
-      {/* 3. Menu Catalog Grid */}
-      <div className="max-w-3xl mx-auto px-6 py-10 space-y-12">
+      {/* 3. Sticky Category Pills Navigation (Desktop + Mobile friendly) */}
+      <div className="sticky top-16 z-20 bg-[#FAF7F2]/95 backdrop-blur-md border-b border-[#EBE2D5]/80 py-2.5 shadow-[0_2px_10px_rgba(46,37,27,0.03)]">
+        <div className="max-w-3xl mx-auto px-4 sm:px-6">
+          <div className="relative flex items-center">
+            {/* Left scroll button (Desktop) */}
+            <button
+              type="button"
+              onClick={() => scrollCategories("left")}
+              className="hidden sm:flex absolute -left-3 z-10 bg-white/95 hover:bg-white text-amber-900 border border-[#EBE2D5] rounded-full p-1.5 shadow-md hover:scale-105 active:scale-95 transition-all cursor-pointer items-center justify-center"
+              title="Rolar para esquerda"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+
+            {/* Category pills container */}
+            <div
+              ref={categoryScrollRef}
+              onWheel={handleCategoryWheel}
+              onMouseDown={handleMouseDown}
+              onMouseMove={handleMouseMove}
+              onMouseUp={handleMouseUpOrLeave}
+              onMouseLeave={handleMouseUpOrLeave}
+              className={`flex items-center gap-2 overflow-x-auto pb-0.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden touch-pan-x scroll-smooth -mx-4 px-4 sm:mx-0 sm:px-6 select-none ${
+                isDragging ? "cursor-grabbing" : "cursor-grab sm:cursor-default"
+              }`}
+            >
+              {/* "Todas" pill */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (hasDragged) return;
+                  setSelectedCategoryId(null);
+                }}
+                className={`px-4 py-2 rounded-full text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+                  selectedCategoryId === null
+                    ? "bg-amber-700 text-white shadow-sm ring-2 ring-amber-700/20"
+                    : "bg-white text-[#6B5A4B] border border-[#EBE2D5] hover:border-amber-700/40 hover:text-amber-950"
+                }`}
+              >
+                <span>Todas</span>
+                <span
+                  className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                    selectedCategoryId === null
+                      ? "bg-white/20 text-white"
+                      : "bg-[#FAF7F2] text-[#8C7A6B]"
+                  }`}
+                >
+                  {products.length}
+                </span>
+              </button>
+
+              {/* Individual categories pills */}
+              {categories.map((category) => {
+                const count = productCountByCategory.get(category.id) || 0;
+                if (count === 0) return null;
+                const isSelected = selectedCategoryId === category.id;
+
+                return (
+                  <button
+                    key={category.id}
+                    type="button"
+                    onClick={() => {
+                      if (hasDragged) return;
+                      setSelectedCategoryId(isSelected ? null : category.id);
+                    }}
+                    className={`px-4 py-2 rounded-full text-xs font-bold transition-all shrink-0 flex items-center gap-1.5 cursor-pointer active:scale-95 ${
+                      isSelected
+                        ? "bg-amber-700 text-white shadow-sm ring-2 ring-amber-700/20"
+                        : "bg-white text-[#6B5A4B] border border-[#EBE2D5] hover:border-amber-700/40 hover:text-amber-950"
+                    }`}
+                  >
+                    <span>{category.name}</span>
+                    <span
+                      className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${
+                        isSelected
+                          ? "bg-white/20 text-white"
+                          : "bg-[#FAF7F2] text-[#8C7A6B]"
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Right scroll button (Desktop) */}
+            <button
+              type="button"
+              onClick={() => scrollCategories("right")}
+              className="hidden sm:flex absolute -right-3 z-10 bg-white/95 hover:bg-white text-amber-900 border border-[#EBE2D5] rounded-full p-1.5 shadow-md hover:scale-105 active:scale-95 transition-all cursor-pointer items-center justify-center"
+              title="Rolar para direita"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 4. Menu Catalog Grid */}
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 py-8 space-y-12">
+        {/* Empty state when filters return nothing */}
+        {visibleProducts.length === 0 && (
+          <div className="bg-white border border-[#EBE2D5] rounded-2xl p-8 sm:p-12 text-center space-y-3 shadow-sm">
+            <p className="text-sm font-semibold text-[#2E251B]">
+              Nenhum produto encontrado
+            </p>
+            <p className="text-xs text-[#8C7A6B]">
+              {search.trim()
+                ? `Não encontramos itens para "${search.trim()}".`
+                : "Não há produtos cadastrados para o filtro selecionado."}
+            </p>
+            {(search.trim() || selectedCategoryId) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearch("");
+                  setSelectedCategoryId(null);
+                }}
+                className="inline-block mt-2 text-xs font-bold text-amber-800 hover:text-amber-950 underline cursor-pointer"
+              >
+                Limpar filtros e ver todos os produtos
+              </button>
+            )}
+          </div>
+        )}
         {categories.map((category) => {
           const categoryProducts = visibleProducts.filter((p) => p.categoryId === category.id);
           if (categoryProducts.length === 0) return null;
