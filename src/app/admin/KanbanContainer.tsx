@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useSocket } from "@/hooks/use-socket";
 import { useSearchParams } from "next/navigation";
-import { Coffee, MessageSquare, Globe, ArrowRight, CheckCircle2, User, MapPin, Trash2, AlertTriangle, Printer, Bell, BellOff } from "lucide-react";
+import { Coffee, MessageSquare, Globe, ArrowRight, CheckCircle2, User, MapPin, Trash2, AlertTriangle, Printer, Bell, BellOff, Bot } from "lucide-react";
 import { printReceipt80mm } from "@/lib/utils/print-receipt";
 import { formatOrderNumber, parseOrderNotes } from "@/lib/utils/format-order";
 import { useSound } from "./sound-context";
@@ -67,7 +67,8 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
   const [mobileTab, setMobileTab] = useState<string>("CONFIRMED");
   const [autoPrintEnabled, setAutoPrintEnabled] = useState<boolean>(false);
   const autoPrintRef = React.useRef(autoPrintEnabled);
-  const [whatsConnected, setWhatsConnected] = useState<boolean | null>(null);
+  const [botActive, setBotActive] = useState<boolean | null>(null);
+  const [isTogglingBot, setIsTogglingBot] = useState(false);
 
   useEffect(() => {
     autoPrintRef.current = autoPrintEnabled;
@@ -91,26 +92,50 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
   const { socket } = useSocket(tenantId);
   const { soundEnabled, toggleSound } = useSound();
 
-  const fetchWhatsStatus = useCallback(async () => {
+  const fetchBotStatus = useCallback(async () => {
     try {
-      const res = await fetch("/api/evolution/status");
+      const res = await fetch(`/api/bot-settings?tenantId=${tenantId}`);
       if (res.ok) {
         const data = await res.json();
-        setWhatsConnected(Boolean(data.connected));
+        setBotActive(Boolean(data.isActive));
       }
     } catch (err) {
-      console.error("Error fetching WhatsApp status:", err);
+      console.error("Error fetching bot settings:", err);
     }
-  }, []);
+  }, [tenantId]);
 
   useEffect(() => {
-    const init = setTimeout(fetchWhatsStatus, 0);
-    const timer = setInterval(fetchWhatsStatus, 15000);
+    const init = setTimeout(fetchBotStatus, 0);
+    const timer = setInterval(fetchBotStatus, 15000);
     return () => {
       clearTimeout(init);
       clearInterval(timer);
     };
-  }, [fetchWhatsStatus]);
+  }, [fetchBotStatus]);
+
+  const toggleBot = async () => {
+    if (botActive === null || isTogglingBot) return;
+    const nextState = !botActive;
+    setBotActive(nextState);
+    setIsTogglingBot(true);
+    try {
+      const res = await fetch("/api/bot-settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          tenantId,
+          isActive: nextState,
+        }),
+      });
+      if (!res.ok) {
+        setBotActive(!nextState);
+      }
+    } catch {
+      setBotActive(!nextState);
+    } finally {
+      setIsTogglingBot(false);
+    }
+  };
 
   // Manage highlight fade and URL cleanup
   useEffect(() => {
@@ -265,60 +290,61 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
           {/* Auto-Print Toggle Button */}
           <button
             onClick={toggleAutoPrint}
-            className={`flex items-center gap-1.5 text-xs border px-3 py-1.5 sm:py-2 rounded-full shadow-sm transition-all cursor-pointer shrink-0 ${
-              autoPrintEnabled
-                ? "bg-amber-600/10 border-amber-600/30 text-amber-900 font-bold"
-                : "bg-white border-[#EBE2D5] text-[#8C7A6B] hover:text-[#2E251B]"
-            }`}
+            className={`flex items-center gap-1.5 text-xs border px-3 py-1.5 sm:py-2 rounded-full shadow-xs transition-all cursor-pointer shrink-0 ${autoPrintEnabled
+              ? "border-emerald-400 bg-emerald-500/5 text-emerald-950 font-semibold hover:bg-emerald-500/10"
+              : "border-red-300 bg-red-500/5 text-red-950 font-semibold hover:bg-red-500/10"
+              }`}
             title="Impressão automática de cupom (80mm) ao receber novo pedido"
           >
-            <Printer className={`h-3.5 w-3.5 ${autoPrintEnabled ? "text-amber-700" : "text-[#8C7A6B]"}`} />
-            <span>Auto-Impressão: <strong>{autoPrintEnabled ? "On" : "Off"}</strong></span>
+            <Printer className={`h-3.5 w-3.5 ${autoPrintEnabled ? "text-emerald-600" : "text-red-600"}`} />
+            <span>Auto-Impressão</span>
           </button>
 
           {/* Notification Sound Toggle */}
           <button
             onClick={toggleSound}
             title={soundEnabled ? "Som das notificações ativado" : "Som das notificações desativado"}
-            className="flex items-center gap-1.5 text-xs bg-white border border-[#EBE2D5] px-3 py-1.5 sm:py-2 rounded-full shadow-sm cursor-pointer hover:border-amber-700/30 transition-colors shrink-0"
+            className={`flex items-center gap-1.5 text-xs border px-3 py-1.5 sm:py-2 rounded-full shadow-xs transition-all cursor-pointer shrink-0 ${soundEnabled
+              ? "border-emerald-400 bg-emerald-500/5 text-emerald-950 font-semibold hover:bg-emerald-500/10"
+              : "border-red-300 bg-red-500/5 text-red-950 font-semibold hover:bg-red-500/10"
+              }`}
           >
             {soundEnabled ? (
-              <Bell className="h-3.5 w-3.5 text-amber-700" />
+              <Bell className="h-3.5 w-3.5 text-emerald-600" />
             ) : (
-              <BellOff className="h-3.5 w-3.5 text-[#8C7A6B]" />
+              <BellOff className="h-3.5 w-3.5 text-red-600" />
             )}
-            <span className="text-[#2E251B] font-semibold hidden sm:inline">Notificações</span>
+            <span>Sons</span>
           </button>
 
-          {/* WhatsApp Connection Status */}
-          <a
-            href="/admin/empresa"
-            title="Status da conexão WhatsApp (Evolution Go). Clique para gerenciar."
-            className={`flex items-center gap-1.5 text-xs bg-white border px-3 py-1.5 sm:py-2 rounded-full shadow-sm cursor-pointer hover:border-amber-700/30 transition-colors shrink-0 ${
-              whatsConnected === null
-                ? "border-[#EBE2D5]"
-                : whatsConnected
-                ? "border-emerald-300"
-                : "border-red-300"
+          {/* Bot Active Toggle Button */}
+          <button
+            onClick={toggleBot}
+            disabled={botActive === null || isTogglingBot}
+            title={
+              botActive
+                ? "Robô de atendimento IA está ATIVO. Clique para pausar."
+                : "Robô de atendimento IA está PAUSADO. Clique para ativar."
+            }
+            className={`flex items-center gap-1.5 text-xs border px-3 py-1.5 sm:py-2 rounded-full shadow-xs transition-all cursor-pointer shrink-0 disabled:opacity-60 ${
+              botActive === null
+                ? "border-[#EBE2D5] bg-white text-[#8C7A6B]"
+                : botActive
+                  ? "border-emerald-400 bg-emerald-500/5 text-emerald-950 font-semibold hover:bg-emerald-500/10"
+                  : "border-red-300 bg-red-500/5 text-red-950 font-semibold hover:bg-red-500/10"
             }`}
           >
-            <span
-              className={`h-2.5 w-2.5 rounded-full ${
-                whatsConnected === null
-                  ? "bg-amber-400 animate-pulse"
-                  : whatsConnected
-                  ? "bg-emerald-500"
-                  : "bg-red-500 animate-pulse"
+            <Bot
+              className={`h-3.5 w-3.5 ${
+                botActive === null
+                  ? "text-[#8C7A6B] animate-pulse"
+                  : botActive
+                    ? "text-emerald-600"
+                    : "text-red-600"
               }`}
             />
-            <span className="text-[#2E251B] font-semibold">
-              {whatsConnected === null
-                ? "WhatsApp..."
-                : whatsConnected
-                ? "WhatsApp On"
-                : "WhatsApp Off"}
-            </span>
-          </a>
+            <span>Robô</span>
+          </button>
         </div>
       </div>
 
@@ -331,17 +357,15 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
             <button
               key={col.key}
               onClick={() => setMobileTab(col.key)}
-              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${
-                isActive
-                  ? "bg-[#FAF7F2] text-amber-950 border border-[#EBE2D5] shadow-xs"
-                  : "text-[#8C7A6B] hover:text-[#2E251B]"
-              }`}
+              className={`flex-1 flex items-center justify-center gap-1.5 py-2 px-2 rounded-lg text-xs font-bold transition-all cursor-pointer shrink-0 ${isActive
+                ? "bg-[#FAF7F2] text-amber-950 border border-[#EBE2D5] shadow-xs"
+                : "text-[#8C7A6B] hover:text-[#2E251B]"
+                }`}
             >
               <span>{col.label.split(" ")[0]}</span>
               <span
-                className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${
-                  isActive ? "bg-amber-700 text-white" : "bg-[#FAF7F2] text-[#8C7A6B] border border-[#EBE2D5]"
-                }`}
+                className={`text-[10px] px-1.5 py-0.2 rounded-full font-extrabold ${isActive ? "bg-amber-700 text-white" : "bg-[#FAF7F2] text-[#8C7A6B] border border-[#EBE2D5]"
+                  }`}
               >
                 {count}
               </span>
@@ -359,9 +383,8 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
           return (
             <div
               key={col.key}
-              className={`rounded-2xl border flex-col overflow-hidden shadow-sm ${col.color.split(" ")[1]} ${col.color.split(" ")[2]} ${
-                isVisibleOnMobile ? "flex flex-1 h-full" : "hidden md:flex"
-              }`}
+              className={`rounded-2xl border flex-col overflow-hidden shadow-sm ${col.color.split(" ")[1]} ${col.color.split(" ")[2]} ${isVisibleOnMobile ? "flex flex-1 h-full" : "hidden md:flex"
+                }`}
             >
               {/* Header column */}
               <div className="p-4 bg-white border-b border-[#EBE2D5] flex justify-between items-center shrink-0 shadow-sm">

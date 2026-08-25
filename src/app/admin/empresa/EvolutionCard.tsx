@@ -82,7 +82,7 @@ export default function EvolutionCard() {
           setStatus("connected");
           setModalOpen(false);
         }
-      } catch {}
+      } catch { }
     }, 3000);
     return () => clearInterval(interval);
   }, [modalOpen]);
@@ -101,7 +101,7 @@ export default function EvolutionCard() {
             <Smartphone className="h-5 w-5 text-amber-700" />
           </div>
           <h2 className="text-lg font-serif font-bold text-amber-950">
-            Conexão WhatsApp (Evolution Go)
+            Conexão WhatsApp
           </h2>
         </div>
         <div className="flex items-center gap-2">
@@ -145,30 +145,21 @@ export default function EvolutionCard() {
 
       <div className="text-sm text-[#6B5A4B] space-y-3">
         <p className="font-light">
-          Conecte o número de WhatsApp que o robô usa para atender os clientes. Uma única
-          instância (<code className="text-[#2E251B] font-mono">EVOLUTION_INSTANCE_NAME</code>)
-          é compartilhada por todas as conexões da Evolution Go.
+          Conecte o número de WhatsApp que o robô usa para atender os clientes.
         </p>
 
         <ol className="space-y-1.5 text-xs text-[#8C7A6B]">
           <li>
-            <strong className="text-[#6B5A4B]">1.</strong> Tenha a Evolution Go rodando
-            (Docker) e confira as variáveis <code className="font-mono">EVOLUTION_API_URL</code>,{" "}
-            <code className="font-mono">EVOLUTION_API_KEY</code> e{" "}
-            <code className="font-mono">EVOLUTION_INSTANCE_NAME</code> no arquivo{" "}
-            <code className="font-mono">.env</code>.
-          </li>
-          <li>
-            <strong className="text-[#6B5A4B]">2.</strong> Clique em{" "}
+            <strong className="text-[#6B5A4B]">1.</strong> Clique em{" "}
             <strong>Conectar Dispositivo</strong> para gerar o QR code.
           </li>
           <li>
-            <strong className="text-[#6B5A4B]">3.</strong> No WhatsApp do celular, abra{" "}
+            <strong className="text-[#6B5A4B]">2.</strong> No WhatsApp do celular, abra{" "}
             <strong>Ajustes &gt; Aparelhos conectados &gt; Conectar um aparelho</strong> e
             escaneie o QR code exibido.
           </li>
           <li>
-            <strong className="text-[#6B5A4B]">4.</strong> Assim que o aparelho for lido, o
+            <strong className="text-[#6B5A4B]">3.</strong> Assim que o aparelho for lido, o
             status muda automaticamente para <strong>Conectado</strong>.
           </li>
         </ol>

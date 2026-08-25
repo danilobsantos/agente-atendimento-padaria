@@ -47,6 +47,31 @@ export default function AdminLayout({
   const [encomendaToasts, setEncomendaToasts] = useState<EncomendaToastData[]>([]);
   const [soundEnabled, setSoundEnabled] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [whatsConnected, setWhatsConnected] = useState<boolean | null>(null);
+
+  // Check Evolution WhatsApp status
+  const checkWhatsAppStatus = useCallback(async () => {
+    try {
+      const res = await fetch("/api/evolution/status");
+      if (res.ok) {
+        const data = await res.json();
+        setWhatsConnected(Boolean(data.connected));
+      } else {
+        setWhatsConnected(false);
+      }
+    } catch {
+      setWhatsConnected(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    const init = setTimeout(checkWhatsAppStatus, 0);
+    const timer = setInterval(checkWhatsAppStatus, 15000);
+    return () => {
+      clearTimeout(init);
+      clearInterval(timer);
+    };
+  }, [checkWhatsAppStatus]);
 
   // Close mobile menu on route change
   useEffect(() => {
@@ -217,9 +242,8 @@ export default function AdminLayout({
 
       {/* Sidebar Drawer */}
       <aside
-        className={`fixed md:static inset-y-0 left-0 z-50 w-64 border-r border-[#EBE2D5] bg-white flex flex-col shrink-0 shadow-[4px_0_24px_rgba(46,37,27,0.04)] transition-transform duration-300 ease-in-out md:translate-x-0 ${
-          isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
-        }`}
+        className={`fixed md:static inset-y-0 left-0 z-50 w-64 border-r border-[#EBE2D5] bg-white flex flex-col shrink-0 shadow-[4px_0_24px_rgba(46,37,27,0.04)] transition-transform duration-300 ease-in-out md:translate-x-0 ${isMobileMenuOpen ? "translate-x-0" : "-translate-x-full"
+          }`}
       >
         {/* Brand */}
         <div className="h-16 flex items-center justify-between px-6 border-b border-[#EBE2D5] shrink-0">
@@ -256,11 +280,10 @@ export default function AdminLayout({
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${
-                  isActive
-                    ? "bg-amber-600/5 text-amber-800 border-l-2 border-amber-700 rounded-l-none"
-                    : "text-[#6B5A4B] hover:text-[#2E251B] hover:bg-[#F5EFE6]/60"
-                }`}
+                className={`flex items-center gap-3 px-4 py-3 rounded-xl text-sm font-medium transition-all duration-150 ${isActive
+                  ? "bg-amber-600/5 text-amber-800 border-l-2 border-amber-700 rounded-l-none"
+                  : "text-[#6B5A4B] hover:text-[#2E251B] hover:bg-[#F5EFE6]/60"
+                  }`}
               >
                 <Icon className={`h-5 w-5 ${isActive ? "text-amber-700" : "text-[#8C7A6B]"}`} />
                 <span>{item.label}</span>
@@ -278,9 +301,46 @@ export default function AdminLayout({
           <span>Sair da Conta</span>
         </button>
 
-        {/* Footer info */}
-        <div className="p-4 border-t border-[#EBE2D5] text-[10px] text-[#A09384] text-center uppercase tracking-widest font-bold">
-          v1.0.0 • SaaS Ready
+        {/* Evolution WhatsApp Status Badge */}
+        <div className="border-t border-[#EBE2D5]">
+          <Link
+            href="/admin/empresa"
+            title="Status da conexão WhatsApp. Clique para gerenciar."
+            className={`flex items-center justify-between px-6 py-2.5 text-xs font-semibold border transition-all ${whatsConnected === null
+              ? "bg-[#FAF7F2] border-[#EBE2D5] text-[#8C7A6B]"
+              : whatsConnected
+                ? "bg-emerald-500/5 text-emerald-950 hover:bg-emerald-500/10"
+                : "bg-red-500/5 text-red-950 hover:bg-red-500/10"
+              }`}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <span
+                className={`h-2.5 w-2.5 rounded-full shrink-0 ${whatsConnected === null
+                  ? "bg-amber-400 animate-pulse"
+                  : whatsConnected
+                    ? "bg-emerald-500"
+                    : "bg-red-500 animate-pulse"
+                  }`}
+              />
+              <span className="truncate text-xs">
+                {whatsConnected === null
+                  ? "Verificando WhatsApp..."
+                  : whatsConnected
+                    ? "WhatsApp Conectado"
+                    : "WhatsApp Desconectado"}
+              </span>
+            </div>
+            <span
+              className={`text-[10px] font-bold px-1.5 py-0.5 rounded-md shrink-0 ${whatsConnected === null
+                ? "bg-[#EBE2D5] text-[#6B5A4B]"
+                : whatsConnected
+                  ? "bg-emerald-100 text-emerald-800"
+                  : "bg-red-100 text-red-800"
+                }`}
+            >
+              {whatsConnected === null ? "..." : whatsConnected ? "ON" : "OFF"}
+            </span>
+          </Link>
         </div>
       </aside>
 
@@ -324,9 +384,8 @@ export default function AdminLayout({
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex flex-col items-center gap-1 py-1 px-3 rounded-lg text-[10px] font-semibold transition-colors ${
-                  isActive ? "text-amber-800" : "text-[#8C7A6B] hover:text-[#2E251B]"
-                }`}
+                className={`flex flex-col items-center gap-1 py-1 px-3 rounded-lg text-[10px] font-semibold transition-colors ${isActive ? "text-amber-800" : "text-[#8C7A6B] hover:text-[#2E251B]"
+                  }`}
               >
                 <Icon className={`h-5 w-5 ${isActive ? "text-amber-700" : "text-[#8C7A6B]"}`} />
                 <span>{item.label}</span>

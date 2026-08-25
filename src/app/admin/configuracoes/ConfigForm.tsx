@@ -86,11 +86,10 @@ export default function ConfigForm({ initialSettings }: { initialSettings: Setti
     <form onSubmit={handleSave} className="space-y-6 max-w-4xl">
       {status && (
         <div
-          className={`p-4 rounded-xl border flex items-start gap-3 text-sm ${
-            status.type === "success"
+          className={`p-4 rounded-xl border flex items-start gap-3 text-sm ${status.type === "success"
               ? "bg-emerald-500/10 text-emerald-800 border-emerald-500/20"
               : "bg-rose-500/10 text-rose-800 border-rose-500/20"
-          }`}
+            }`}
         >
           {status.type === "success" ? (
             <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-700" />
@@ -333,14 +332,12 @@ export default function ConfigForm({ initialSettings }: { initialSettings: Setti
           <button
             type="button"
             onClick={() => setIsActive(!isActive)}
-            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-              isActive ? "bg-amber-600" : "bg-[#EBE2D5]"
-            }`}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${isActive ? "bg-amber-600" : "bg-[#EBE2D5]"
+              }`}
           >
             <span
-              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                isActive ? "translate-x-5" : "translate-x-0"
-              }`}
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${isActive ? "translate-x-5" : "translate-x-0"
+                }`}
             />
           </button>
         </div>
