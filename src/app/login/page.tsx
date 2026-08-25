@@ -117,18 +117,6 @@ function LoginForm() {
           {!isLoading && <ArrowRight className="h-4 w-4" />}
         </button>
       </form>
-
-      <div className="border-t border-[#EBE2D5]/60 pt-4 text-center">
-        <p className="text-xs text-[#6B5A4B]">
-          Ainda não tem conta?{" "}
-          <Link
-            href="/signup"
-            className="text-amber-700 font-bold hover:underline"
-          >
-            Criar conta de parceiro
-          </Link>
-        </p>
-      </div>
     </div>
   );
 }
