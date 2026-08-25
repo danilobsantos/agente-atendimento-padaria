@@ -247,10 +247,9 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
           } else if (agentResponse.intent === "confirmar_pedido") {
             try {
               const orderId = await OrdersService.finalizeOrder(session);
-              session.state = BotState.START;
+              session.state = BotState.FINISHED;
               session.activeOrderId = orderId;
               const { formatOrderNumber } = await import("@/lib/utils/format-order");
-              // We DO NOT clear the session here anymore. We keep it alive so the context window remains.
               finalBotText += `\n\n*(Pedido ${formatOrderNumber(orderId)} gerado com sucesso!)*`;
             } catch (e: any) {
               console.error("[Bot Process] Error finalizing order:", e);
@@ -258,14 +257,15 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
             }
           } else if (agentResponse.intent === "cancelar_pedido") {
             session.state = BotState.CANCELLED;
-            if (session.activeOrderId) {
+            const targetOrderId = session.activeOrderId || customer.activeOrderId;
+            if (targetOrderId) {
               const existingOrder = await prisma.order.findUnique({
-                where: { id: session.activeOrderId },
+                where: { id: targetOrderId },
                 select: { status: true }
               });
               if (existingOrder && ["PENDING", "CONFIRMED", "PREPARING"].includes(existingOrder.status)) {
                 await prisma.order.update({
-                  where: { id: session.activeOrderId },
+                  where: { id: targetOrderId },
                   data: { status: "CANCELLED" }
                 });
                 await prisma.customer.update({
@@ -275,7 +275,7 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
                 const { redisChannel, redisPub } = await import("@/lib/redis");
                 await redisPub.publish(
                   redisChannel("tenant", session.tenantId, "order"),
-                  JSON.stringify({ orderId: session.activeOrderId, status: "CANCELLED", event: "ORDER_STATUS_UPDATED" })
+                  JSON.stringify({ orderId: targetOrderId, status: "CANCELLED", event: "ORDER_STATUS_UPDATED" })
                 );
               }
             }
@@ -284,7 +284,14 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
 
           // Injeção de Resumo: Se o pedido tem itens e forma de pagamento, e endereço (se delivery),
           // e ainda não foi finalizado nem cancelado, injetamos o resumo do carrinho para o cliente validar.
-          const isReadyToConfirm = session.order.items.length > 0 && session.payment && (session.orderType !== 'DELIVERY' || session.customer.address);
+          const isReadyToConfirm =
+            session.order.items.length > 0 &&
+            session.payment &&
+            (session.orderType !== 'DELIVERY' || session.customer.address) &&
+            session.state !== BotState.START &&
+            session.state !== BotState.SHOW_MENU &&
+            session.state !== BotState.FINISHED &&
+            session.state !== BotState.CANCELLED;
           if (isReadyToConfirm && agentResponse.intent !== "confirmar_pedido" && agentResponse.intent !== "cancelar_pedido") {
             const hasSummary = finalBotText.includes("Resumo") || finalBotText.includes("Total:");
             if (!hasSummary) {

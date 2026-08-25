@@ -283,6 +283,25 @@ test("retirada no balcão não exige endereço", async () => {
   assert.equal(order.items.length, 2);
 });
 
+// Novo pedido após confirmar: não deve injetar resumo do pedido anterior
+test("novo pedido após confirmação inicia com carrinho limpo e não injeta resumo anterior", async () => {
+  // 1. Faz o primeiro pedido
+  await runTurn("retirada", canned("generico", { orderType: "PICKUP" }));
+  await runTurn("1 tapioca", canned("adicionar_itens", { products: [qty(P_TAPIOCA)] }));
+  await runTurn("Pix", canned("generico", { customerInfo: { name: "Danilo", address: "", payment: "Pix" } }));
+  await runTurn("sim", canned("confirmar_pedido"));
+
+  assert.equal(await prisma.order.count({ where: { customerId: CUSTOMER_ID } }), 1);
+
+  // 2. Cliente manda mensagem querendo fazer outro pedido
+  const res = await runTurn("gostaria de fazer outro pedido", canned("generico", { message: "O que você gostaria de pedir?" }));
+  const body = await res.json();
+
+  assert.equal(res.status, 200);
+  assert.doesNotMatch(body.response, /Resumo do seu pedido/i);
+  assert.doesNotMatch(body.response, /Podemos confirmar o pedido\?/i);
+});
+
 // LLM drift: devolve "confirmar_pedido" enquanto PEDE confirmação. O pedido NÃO
 // pode ser finalizado antes do cliente confirmar explicitamente.
 test("intent confirmar_pedido sem confirmação explícita não finaliza o pedido", async () => {
