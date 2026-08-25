@@ -306,28 +306,28 @@ export default function AdminLayout({
           <Link
             href="/admin/empresa"
             title="Status da conexão WhatsApp. Clique para gerenciar."
-            className={`flex items-center justify-between px-6 py-2.5 text-xs font-semibold border transition-all ${whatsConnected === null
+            className={`flex items-center justify-between px-6 py-4 text-xs font-semibold border transition-all ${whatsConnected === null
               ? "bg-[#FAF7F2] border-[#EBE2D5] text-[#8C7A6B]"
               : whatsConnected
-                ? "bg-emerald-500/5 text-emerald-950 hover:bg-emerald-500/10"
-                : "bg-red-500/5 text-red-950 hover:bg-red-500/10"
+                ? "text-emerald-950 hover:bg-emerald-500/10"
+                : "text-red-950 hover:bg-red-500/10"
               }`}
           >
             <div className="flex items-center gap-2 min-w-0">
-              <span
+              {/* <span
                 className={`h-2.5 w-2.5 rounded-full shrink-0 ${whatsConnected === null
                   ? "bg-amber-400 animate-pulse"
                   : whatsConnected
                     ? "bg-emerald-500"
                     : "bg-red-500 animate-pulse"
                   }`}
-              />
+              /> */}
               <span className="truncate text-xs">
                 {whatsConnected === null
                   ? "Verificando WhatsApp..."
                   : whatsConnected
-                    ? "WhatsApp Conectado"
-                    : "WhatsApp Desconectado"}
+                    ? "Whatsapp Status"
+                    : "WhatsApp Status"}
               </span>
             </div>
             <span
@@ -338,7 +338,7 @@ export default function AdminLayout({
                   : "bg-red-100 text-red-800"
                 }`}
             >
-              {whatsConnected === null ? "..." : whatsConnected ? "ON" : "OFF"}
+              {whatsConnected === null ? "..." : whatsConnected ? "CONECTADO" : "DESCONECTADO"}
             </span>
           </Link>
         </div>
