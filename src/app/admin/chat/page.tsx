@@ -1,21 +1,15 @@
-import { prisma } from "@/lib/prisma";
+import { getAuthUser } from "@/lib/utils/auth-route";
 import ChatContainer from "./ChatContainer";
+import { redirect } from "next/navigation";
 
 export const dynamic = "force-dynamic";
 
 export default async function ChatPage() {
-  // Fetch the first active tenant from the database on the server
-  const tenant = await prisma.tenant.findFirst({
-    where: { active: true },
-  });
+  const user = await getAuthUser();
 
-  if (!tenant) {
-    return (
-      <div className="flex-1 flex items-center justify-center text-[#8C7A6B] bg-[#FAF7F2]">
-        Nenhum Tenant (Padaria) cadastrado. Rode o seed no banco de dados.
-      </div>
-    );
+  if (!user) {
+    redirect("/login");
   }
 
-  return <ChatContainer tenantId={tenant.id} />;
+  return <ChatContainer tenantId={user.tenantId} />;
 }
