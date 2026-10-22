@@ -69,8 +69,8 @@ export class SessionService {
         }));
         
         if (order.deliveryAddress) {
-          const addr = order.deliveryAddress as any;
-          newSession.customer.address = addr.fullAddress || "";
+          const addr = order.deliveryAddress as { fullAddress?: string } | null;
+          newSession.customer.address = addr?.fullAddress || "";
         } else {
           // Order without address = pickup (retirada)
           newSession.orderType = "PICKUP";

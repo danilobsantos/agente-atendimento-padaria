@@ -94,9 +94,10 @@ export class IntentRouter {
             session.activeOrderId = orderId;
             const { formatOrderNumber } = await import("../utils/format-order");
             return { bypassed: true, reply: `Pedido confirmado com sucesso! Já começamos a prepará-lo. (Pedido ${formatOrderNumber(orderId)})` };
-          } catch (e: any) {
+          } catch (e: unknown) {
             console.error("[Intent Router] Error finalizing order:", e);
-            return { bypassed: true, reply: `Erro ao finalizar: ${e.message}` };
+            const msg = e instanceof Error ? e.message : String(e);
+            return { bypassed: true, reply: `Erro ao finalizar: ${msg}` };
           }
         }
         break;

@@ -107,8 +107,10 @@ export default function CompanyForm({ company }: { company: Company }) {
         <div className="flex items-center gap-5">
           <div className="h-20 w-20 rounded-2xl border border-[#EBE2D5] bg-[#FAF7F2] overflow-hidden flex items-center justify-center shrink-0">
             {logoPreview ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
               <img src={logoPreview} alt="Nova logo" className="h-full w-full object-contain" />
             ) : logoUrl ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
               <img src={logoUrl} alt="Logo da empresa" className="h-full w-full object-contain" />
             ) : (
               <span className="text-2xl font-serif font-bold text-[#A09384]">

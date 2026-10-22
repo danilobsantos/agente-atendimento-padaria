@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import fs from "fs";
+import path from "path";
 import { prisma } from "@/lib/prisma";
 import { evolutionGo } from "@/lib/services/evolution-go";
 import { SessionService } from "@/lib/services/session.service";
@@ -251,9 +253,10 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
               session.activeOrderId = orderId;
               const { formatOrderNumber } = await import("@/lib/utils/format-order");
               finalBotText += `\n\n*(Pedido ${formatOrderNumber(orderId)} gerado com sucesso!)*`;
-            } catch (e: any) {
+            } catch (e: unknown) {
               console.error("[Bot Process] Error finalizing order:", e);
-              finalBotText = `Ops! Não consegui finalizar o seu pedido: ${e.message}\nPor favor, informe os dados que faltam para que eu possa concluir.`;
+              const errorMsg = e instanceof Error ? e.message : String(e);
+              finalBotText = `Ops! Não consegui finalizar o seu pedido: ${errorMsg}\nPor favor, informe os dados que faltam para que eu possa concluir.`;
             }
           } else if (agentResponse.intent === "cancelar_pedido") {
             session.state = BotState.CANCELLED;
@@ -344,27 +347,32 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
     await MessageBuffer.releaseLock(customer.tenantId, customerId);
 
     // 6. Send response (auto-splits long messages with typing delays)
-    await (deps.send ?? sendChunkedResponse)({
-      phone: customer.phone,
-      customerId: customer.id,
-      tenantId: customer.tenantId,
-      customerName: customer.name || customer.phone,
-      isHumanAttending: customer.isHumanAttending,
-      text: finalBotText,
-    });
+    try {
+      await (deps.send ?? sendChunkedResponse)({
+        phone: customer.phone,
+        customerId: customer.id,
+        tenantId: customer.tenantId,
+        customerName: customer.name || customer.phone,
+        isHumanAttending: customer.isHumanAttending,
+        text: finalBotText,
+      });
+    } catch (sendErr: unknown) {
+      const sendErrMsg = sendErr instanceof Error ? sendErr.message : String(sendErr);
+      console.warn(`[Bot Process] Warning sending final bot text to ${customer.phone}:`, sendErrMsg);
+    }
 
     await evolutionGo.sendPresence(customer.phone, "paused").catch(() => { });
 
     return NextResponse.json({ status: "success", response: finalBotText });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[Bot Process] Error:", error);
     if (process.env.NODE_ENV !== "test") {
       try {
-        const fs = require("fs");
-        const path = require("path");
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        const errorStack = error instanceof Error ? error.stack || "no-stack" : "no-stack";
         fs.writeFileSync(
           path.join(process.cwd(), "bot-error.log"),
-          `${new Date().toISOString()}\\nError: ${error?.message || error}\\nStack: ${error?.stack || "no-stack"}\\n`,
+          `${new Date().toISOString()}\nError: ${errorMsg}\nStack: ${errorStack}\n`,
           { flag: "a" }
         );
       } catch (fsErr) {

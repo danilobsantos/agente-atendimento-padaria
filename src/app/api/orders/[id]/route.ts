@@ -145,8 +145,9 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     }
 
     return NextResponse.json(order);
-  } catch (err: any) {
+  } catch (err: unknown) {
     console.error("Error in PATCH /api/orders/[id]:", err);
-    return NextResponse.json({ error: err.message || "Internal server error" }, { status: 500 });
+    const msg = err instanceof Error ? err.message : "Internal server error";
+    return NextResponse.json({ error: msg }, { status: 500 });
   }
 }

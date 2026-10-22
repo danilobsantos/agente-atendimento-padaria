@@ -112,12 +112,40 @@ export async function sendChunkedResponse(params: SendChunkedParams): Promise<vo
       })
     );
 
-    // Send via WhatsApp
+    // Send via WhatsApp with retry and non-fatal error logging
     try {
-      await evolutionService.sendText({ number: phone, text: chunk });
-    } catch (e: any) {
-      console.error(`[sendChunkedResponse] sendText FAILED for phone="${phone}" (len=${phone.length}):`, e?.message || e);
-      throw e;
+      let sent = false;
+      let lastErr: unknown = null;
+
+      for (let attempt = 1; attempt <= 2; attempt++) {
+        try {
+          await evolutionService.sendText({ number: phone, text: chunk });
+          sent = true;
+          break;
+        } catch (err: unknown) {
+          lastErr = err;
+          const msg = err instanceof Error ? err.message : String(err);
+          // If it's a known non-retryable error (e.g. no LID found or invalid number), do not retry
+          if (msg.includes("no LID found") || msg.includes("not registered")) {
+            break;
+          }
+          if (attempt < 2) {
+            await delay(1000);
+          }
+        }
+      }
+
+      if (!sent && lastErr) {
+        console.warn(
+          `[sendChunkedResponse] WhatsApp sendText failed for phone="${phone}" (customerId="${customerId}", chunk ${i + 1}/${chunks.length}):`,
+          lastErr instanceof Error ? lastErr.message : lastErr
+        );
+      }
+    } catch (e: unknown) {
+      console.error(
+        `[sendChunkedResponse] Unexpected error during sendText for phone="${phone}":`,
+        e instanceof Error ? e.message : e
+      );
     }
   }
 }

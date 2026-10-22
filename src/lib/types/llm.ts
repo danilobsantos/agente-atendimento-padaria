@@ -1,9 +1,9 @@
 export interface LLMToolParameter {
   type: string;
   description?: string;
-  properties?: Record<string, any>;
+  properties?: Record<string, unknown>;
   required?: string[];
-  items?: any;
+  items?: unknown;
 }
 
 export interface LLMTool {
@@ -16,7 +16,7 @@ export interface LLMToolCall {
   id: string;
   name: string;
   arguments: string; // JSON string
-  _raw?: any; // Mantém a estrutura original do provedor (ex: thought_signature do Gemini)
+  _raw?: unknown; // Mantém a estrutura original do provedor (ex: thought_signature do Gemini)
 }
 
 export interface LLMMessage {

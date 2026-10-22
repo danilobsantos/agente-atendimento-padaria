@@ -132,10 +132,10 @@ export default function UsersManager({
         });
         setTimeout(closeModal, 1000);
       }
-    } catch (err: any) {
+    } catch (err: unknown) {
       setStatus({
         type: "error",
-        message: err.message || "Ocorreu um erro ao processar a solicitação",
+        message: err instanceof Error ? err.message : "Ocorreu um erro ao processar a solicitação",
       });
     } finally {
       setIsLoading(false);
@@ -164,7 +164,7 @@ export default function UsersManager({
       }
 
       setUsers((prev) => prev.filter((u) => u.id !== user.id));
-    } catch (err) {
+    } catch {
       alert("Erro ao excluir usuário.");
     }
   };

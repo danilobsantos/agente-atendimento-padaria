@@ -2,7 +2,6 @@
 
 import React, { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
-import Link from "next/link";
 import { Coffee, KeyRound, Mail, AlertCircle, ArrowRight } from "lucide-react";
 
 function LoginForm() {

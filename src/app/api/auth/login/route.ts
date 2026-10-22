@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import fs from "fs";
+import path from "path";
 import { prisma } from "@/lib/prisma";
 import { signJWT } from "@/lib/auth";
 import bcrypt from "bcryptjs";
@@ -75,14 +77,14 @@ export async function POST(request: Request) {
     );
 
     return response;
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[Login] Error:", error);
     try {
-      const fs = require("fs");
-      const path = require("path");
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack || "no-stack" : "no-stack";
       fs.writeFileSync(
         path.join(process.cwd(), "login-error.log"),
-        `${new Date().toISOString()}\nError: ${error?.message || error}\nStack: ${error?.stack || "no-stack"}\n`
+        `${new Date().toISOString()}\nError: ${errorMsg}\nStack: ${errorStack}\n`
       );
     } catch (fsErr) {
       console.error("Failed to write error log:", fsErr);

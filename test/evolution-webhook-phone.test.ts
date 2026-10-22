@@ -1,6 +1,7 @@
 import { test, describe } from "node:test";
 import assert from "node:assert/strict";
 import { getPhoneLookupVariants, normalizePhone } from "../src/lib/utils/company";
+import { resolveCustomerPhone, extractPhoneFromJid, isLidJid, isGroupJid } from "../src/lib/utils/whatsapp";
 
 describe("Phone Normalization and Evolution Webhook JID Resolution", () => {
   test("normalizePhone standardizes Brazilian phones to DDI 55", () => {
@@ -22,50 +23,25 @@ describe("Phone Normalization and Evolution Webhook JID Resolution", () => {
     assert.ok(variants.includes("3588160553"), "should include 3588160553");
   });
 
-  test("extractPhoneFromJid and resolveCustomerPhone prioritizes @s.whatsapp.net over @lid", () => {
-    function extractPhoneFromJid(jid: unknown): string | null {
-      if (!jid || typeof jid !== "string") return null;
-      const userPart = jid.split("@")[0].split(":")[0];
-      const digits = userPart.replace(/\D/g, "");
-      return digits || null;
-    }
+  test("isLidJid and isGroupJid detect non-phone WhatsApp identifiers", () => {
+    assert.equal(isLidJid("91714765242460@lid"), true);
+    assert.equal(isLidJid("123119649996807026:0@lid"), true);
+    assert.equal(isLidJid("5535988160553@s.whatsapp.net"), false);
 
-    function resolveCustomerPhone(data: any, info: any): string | null {
-      const candidateJids: unknown[] = [
-        info.SenderAlt,
-        info.Sender,
-        data.senderAlt,
-        data.sender,
-        data.key?.remoteJidAlt,
-        data.key?.participant,
-        data.key?.participantPn,
-        data.senderPhone,
-        data.senderPn,
-        info.Chat,
-        data.key?.remoteJid,
-      ];
+    assert.equal(isGroupJid("120363024823904@g.us"), true);
+    assert.equal(isGroupJid("5535988160553@s.whatsapp.net"), false);
+  });
 
-      for (const jid of candidateJids) {
-        if (typeof jid === "string" && jid.includes("@s.whatsapp.net")) {
-          const extracted = extractPhoneFromJid(jid);
-          if (extracted) return normalizePhone(extracted);
-        }
-      }
+  test("extractPhoneFromJid returns null for LIDs and groups, but extracts valid phones", () => {
+    assert.equal(extractPhoneFromJid("91714765242460@lid"), null);
+    assert.equal(extractPhoneFromJid("123119649996807026:0@lid"), null);
+    assert.equal(extractPhoneFromJid("120363024823904@g.us"), null);
 
-      for (const jid of candidateJids) {
-        if (typeof jid === "string") {
-          const extracted = extractPhoneFromJid(jid);
-          if (extracted && extracted.length >= 10 && extracted.length <= 14) {
-            return normalizePhone(extracted);
-          }
-        }
-      }
+    assert.equal(extractPhoneFromJid("5535988160553@s.whatsapp.net"), "5535988160553");
+    assert.equal(extractPhoneFromJid("5535988160553:1@s.whatsapp.net"), "5535988160553");
+  });
 
-      const fallback = info.Chat ?? data.key?.remoteJid ?? info.Sender ?? data.sender;
-      const fallbackDigits = extractPhoneFromJid(fallback);
-      return fallbackDigits ? normalizePhone(fallbackDigits) : null;
-    }
-
+  test("resolveCustomerPhone prioritizes @s.whatsapp.net over @lid", () => {
     // Scenario 1: WhatsApp LID in Chat, but real phone in Sender
     const payloadLidWithSender = {
       data: {
@@ -95,6 +71,24 @@ describe("Phone Normalization and Evolution Webhook JID Resolution", () => {
     assert.equal(
       resolveCustomerPhone(payloadStandard.data, payloadStandard.data.Info),
       "5535988160553"
+    );
+
+    // Scenario 3: LID-only event (production bug scenario with 14-digit LID 91714765242460)
+    const payloadLidOnly = {
+      data: {
+        Info: {
+          Chat: "91714765242460@lid",
+        },
+        key: {
+          remoteJid: "91714765242460@lid",
+        },
+        sender: "91714765242460@lid",
+      },
+    };
+    assert.equal(
+      resolveCustomerPhone(payloadLidOnly.data, payloadLidOnly.data.Info),
+      null,
+      "should return null for LID-only payload, preventing ghost customer creation"
     );
   });
 });

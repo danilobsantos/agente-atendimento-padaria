@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import fs from "fs";
+import path from "path";
 import { prisma } from "@/lib/prisma";
 
 // GET /api/bot-settings?tenantId=xxx
@@ -91,14 +93,14 @@ export async function PUT(request: Request) {
       llmApiKey: settings.llmApiKey ? "••••" + settings.llmApiKey.slice(-4) : "",
       evolutionInstanceToken: settings.evolutionInstanceToken ? "••••••••" : "",
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[BotSettings] Error:", error);
     try {
-      const fs = require("fs");
-      const path = require("path");
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack || "no-stack" : "no-stack";
       fs.writeFileSync(
         path.join(process.cwd(), "settings-error.log"),
-        `${new Date().toISOString()}\nError: ${error?.message || error}\nStack: ${error?.stack || "no-stack"}\n`
+        `${new Date().toISOString()}\nError: ${errorMsg}\nStack: ${errorStack}\n`
       );
     } catch (fsErr) {
       console.error("Failed to write settings error log:", fsErr);

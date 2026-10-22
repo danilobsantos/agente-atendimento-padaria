@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSocket } from "@/hooks/use-socket";
-import { Send, User, Bot, Volume2, UserCheck, ShieldAlert } from "lucide-react";
+import { Send, User, Bot, Volume2, UserCheck } from "lucide-react";
 
 interface Message {
   id: string;

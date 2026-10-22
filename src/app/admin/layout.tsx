@@ -77,7 +77,10 @@ export default function AdminLayout({
 
   // Close mobile menu on route change
   useEffect(() => {
-    setIsMobileMenuOpen(false);
+    const timer = setTimeout(() => {
+      setIsMobileMenuOpen(false);
+    }, 0);
+    return () => clearTimeout(timer);
   }, [pathname]);
 
   // Load sound preference
@@ -270,6 +273,7 @@ export default function AdminLayout({
         <div className="h-16 flex items-center justify-between px-6 border-b border-[#EBE2D5] shrink-0">
           <div className="flex items-center gap-3 min-w-0">
             {tenantLogoUrl ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 src={tenantLogoUrl}
                 alt={tenantName}
@@ -377,6 +381,7 @@ export default function AdminLayout({
           </button>
           <div className="flex items-center gap-2 min-w-0 max-w-[200px]">
             {tenantLogoUrl ? (
+              /* eslint-disable-next-line @next/next/no-img-element */
               <img
                 src={tenantLogoUrl}
                 alt={tenantName}

@@ -71,6 +71,16 @@ export class EvolutionGoService {
         delay: params.delay ?? 1500,
       }),
     });
+
+    if (body?.key?.id) {
+      try {
+        const { redisPub, redisKey } = await import("@/lib/redis");
+        await redisPub.set(redisKey("sent_msg", body.key.id), "1", "EX", 120);
+      } catch (err) {
+        console.error("[EvolutionGo] Failed to cache sent message ID in Redis:", err);
+      }
+    }
+
     return body;
   }
 
@@ -102,6 +112,16 @@ export class EvolutionGoService {
         })),
       }),
     });
+
+    if (body?.key?.id) {
+      try {
+        const { redisPub, redisKey } = await import("@/lib/redis");
+        await redisPub.set(redisKey("sent_msg", body.key.id), "1", "EX", 120);
+      } catch (err) {
+        console.error("[EvolutionGo] Failed to cache sent button message ID in Redis:", err);
+      }
+    }
+
     return body;
   }
 

@@ -112,10 +112,15 @@ export async function POST(request: Request) {
       // Send message via Evolution Go
       const { getEvolutionServiceForTenant } = await import("@/lib/services/evolution-go");
       const evolutionService = await getEvolutionServiceForTenant(customer.tenantId);
-      await evolutionService.sendText({
-        number: customer.phone,
-        text: content,
-      });
+      try {
+        await evolutionService.sendText({
+          number: customer.phone,
+          text: content,
+        });
+      } catch (sendErr: unknown) {
+        const errorMsg = sendErr instanceof Error ? sendErr.message : String(sendErr);
+        console.warn(`[Chat] Failed to send WhatsApp message to ${customer.phone}:`, errorMsg);
+      }
     }
 
     return NextResponse.json(message, { status: 201 });

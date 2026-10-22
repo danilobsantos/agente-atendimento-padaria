@@ -1,15 +1,15 @@
-import { LLMAgent } from "./src/lib/bot/llm-agent";
-import { BotState } from "./src/lib/types/session";
+import { LLMAgent, LLMAgentConfig } from "./src/lib/bot/llm-agent";
+import { BotSession, BotState } from "./src/lib/types/session";
 
 async function main() {
-  const session: any = {
+  const session: BotSession = {
     tenantId: "123",
     customerId: "456",
     phone: "11999999999",
     state: BotState.START,
     customer: {},
     order: {
-      items: [{ id: "1", name: "Pão de Queijo", price: 5, quantity: 2 }, { id: "2", name: "Cappuccino", price: 8, quantity: 1 }],
+      items: [{ productId: "1", name: "Pão de Queijo", price: 5, quantity: 2 }, { productId: "2", name: "Cappuccino", price: 8, quantity: 1 }],
       total: 18,
       deliveryFee: 0,
     },
@@ -22,15 +22,16 @@ async function main() {
 
   const message = "Danilo Santos\nAv. Valdomiro Cecílio Ribeiro, 820 - Jardim Aeroporto - Guaxupé/MG\nPix na entrega.";
 
-  const config: any = {
+  const config: LLMAgentConfig = {
     provider: "GEMINI",
-    apiKey: process.env.GEMINI_API_KEY,
+    apiKey: process.env.GEMINI_API_KEY || "",
     model: "gemini-3.5-flash", // We might need to use gemini-1.5-flash since 3.5 doesn't exist yet
     maxOutputTokens: 1024,
     messageContextLimit: 10,
     temperature: 0.7,
     systemPrompt: "Você é um assistente virtual.",
     menuUrl: "http://localhost:3000",
+    cartDescription: "Carrinho: 2x Pão de Queijo, 1x Cappuccino",
   };
 
   const { response: res } = await LLMAgent.processMessage(session, message, config);
