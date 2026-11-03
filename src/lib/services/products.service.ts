@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { redisKey, redisPub as redis } from "@/lib/redis";
+import { matchesProduct, normalize } from "@/lib/utils/fuzzy";
 
 export interface ProductSummary {
   id: string;
@@ -19,86 +20,6 @@ export interface SearchExtra {
 export interface SearchProduct extends ProductSummary {
   shortId: string;
   extras: SearchExtra[];
-}
-
-function levenshtein(a: string, b: string): number {
-  const m = a.length;
-  const n = b.length;
-  if (m === 0) return n;
-  if (n === 0) return m;
-  let prev = Array.from({ length: n + 1 }, (_, i) => i);
-  for (let i = 1; i <= m; i++) {
-    const cur = [i];
-    for (let j = 1; j <= n; j++) {
-      cur[j] = Math.min(
-        prev[j] + 1,
-        cur[j - 1] + 1,
-        prev[j - 1] + (a[i - 1] === b[j - 1] ? 0 : 1),
-      );
-    }
-    prev = cur;
-  }
-  return prev[n];
-}
-
-const STOP_WORDS = new Set([
-  "de", "do", "da", "dos", "das",
-  "com", "sem", "e",
-  "um", "uma", "uns", "umas",
-  "o", "a", "os", "as",
-  "em", "no", "na", "nos", "nas",
-  "para", "pra", "por", "ao", "aos"
-]);
-
-function tokenize(text: string): string[] {
-  return text
-    .split(/[\s\-–—_.,;:!?()\/+]+/)
-    .map((t) => t.trim())
-    .filter((t) => t.length > 0 && !STOP_WORDS.has(t));
-}
-
-// Extrai a substring de text (com mesmo tamanho aproximado de token) que minimiza a distância levenshtein
-function closestSubstringDistance(text: string, token: string): number {
-  if (text.length <= token.length) {
-    return levenshtein(text, token);
-  }
-  let bestDist = Infinity;
-  for (let i = 0; i <= text.length - token.length; i++) {
-    const sub = text.slice(i, i + token.length);
-    const dist = levenshtein(sub, token);
-    if (dist < bestDist) bestDist = dist;
-    if (bestDist === 0) break;
-  }
-  return bestDist;
-}
-
-// Tokenized search: busca por tokens significativos no nome e categoria do produto
-function matchesProduct(nome: string, categoria: string, busca: string): boolean {
-  if (!busca) return true;
-  if (nome.includes(busca)) return true;
-
-  const target = `${nome} ${categoria}`.trim();
-  if (target.includes(busca)) return true;
-
-  const tokens = tokenize(busca);
-  if (tokens.length === 0) return true;
-
-  const matched = tokens.filter((token) => {
-    if (target.includes(token)) return true;
-    if (token.length >= 5) {
-      return closestSubstringDistance(target, token) <= 2;
-    }
-    return false;
-  });
-
-  // Se tem 1 ou 2 tokens, todos devem dar match
-  if (tokens.length <= 2) {
-    return matched.length === tokens.length;
-  }
-
-  // Se tem 3 ou mais tokens (ex: "pão francês com manteiga", "suco de açaí com leite"):
-  // Aceita se todos derem match OU se pelo menos (N - 1) tokens derem match
-  return matched.length >= tokens.length - 1;
 }
 
 export class ProductsService {
@@ -153,7 +74,6 @@ export class ProductsService {
   ): Promise<SearchProduct[]> {
     const products = await this.getProducts(tenantId);
 
-    const normalize = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
     const busca = normalize((opts.busca || "").trim());
     const categoria = normalize((opts.categoria || "").trim());
 

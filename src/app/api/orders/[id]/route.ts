@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { sendChunkedResponse } from "@/lib/bot/message-sender";
 import { formatOrderNumber } from "@/lib/utils/format-order";
+import { requireUser, unauthorized } from "@/lib/utils/api-auth";
 
 interface RouteParams {
   params: Promise<{ id: string }>;
@@ -9,9 +10,12 @@ interface RouteParams {
 
 // GET /api/orders/[id]
 export async function GET(_request: Request, { params }: RouteParams) {
+  const user = await requireUser();
+  if (!user) return unauthorized();
+
   const { id } = await params;
-  const order = await prisma.order.findUnique({
-    where: { id },
+  const order = await prisma.order.findFirst({
+    where: { id, tenantId: user.tenantId },
     include: {
       customer: true,
       items: { include: { product: true } },
@@ -27,13 +31,16 @@ export async function GET(_request: Request, { params }: RouteParams) {
 
 // PATCH /api/orders/[id] — Update order status or items
 export async function PATCH(request: Request, { params }: RouteParams) {
+  const user = await requireUser();
+  if (!user) return unauthorized();
+
   const { id } = await params;
   const body = await request.json();
 
   try {
-    // Fetch current status to check transition constraints
-    const existingOrder = await prisma.order.findUnique({
-      where: { id },
+    // Fetch current status to check transition constraints (escopado ao tenant)
+    const existingOrder = await prisma.order.findFirst({
+      where: { id, tenantId: user.tenantId },
       select: { status: true, deliveryFee: true },
     });
 

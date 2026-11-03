@@ -15,6 +15,9 @@ import {
   Building2,
   Menu,
   X,
+  Bell,
+  BookOpen,
+  BarChart3,
 } from "lucide-react";
 import { useSocket } from "@/hooks/use-socket";
 import OrderToast from "@/components/OrderToast";
@@ -244,9 +247,12 @@ export default function AdminLayout({
     { href: "/admin", label: "Dashboard", icon: LayoutDashboard },
     { href: "/admin/chat", label: "Live Chat", icon: MessageSquare },
     { href: "/admin/cardapio", label: "Cardápio", icon: Utensils },
+    { href: "/admin/alertas", label: "Alertas", icon: Bell },
+    { href: "/admin/conhecimento", label: "Conhecimento", icon: BookOpen },
     ...(userRole === "ADMIN"
       ? [
           { href: "/admin/configuracoes", label: "Configurações IA", icon: Settings },
+          { href: "/admin/metricas", label: "Métricas IA", icon: BarChart3 },
           { href: "/admin/usuarios", label: "Usuários", icon: Users },
         ]
       : []),

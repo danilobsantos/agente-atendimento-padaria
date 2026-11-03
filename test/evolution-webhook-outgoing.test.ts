@@ -8,23 +8,28 @@ import { POST } from "../src/app/api/webhooks/evolution/route";
 describe("Evolution Webhook - External Device Message Synchronization", () => {
   let tenantId: string;
   const testPhone = "5535999990001";
+  // Tenant dedicado: o webhook resolve o tenant pela instância, sem fallback
+  // para "primeiro tenant ativo" (isso permitia injetar em tenant alheio).
+  const TEST_INSTANCE = "test-instance-sync";
 
   before(async () => {
-    // Setup or find an active tenant
-    const tenant = await prisma.tenant.findFirst({ where: { active: true } });
-    if (!tenant) {
-      const createdTenant = await prisma.tenant.create({
-        data: {
-          slug: "padaria-teste-sync",
-          name: "Padaria Teste External Sync",
-          cnpj: "12.345.678/0001-90",
-          active: true,
-        },
-      });
-      tenantId = createdTenant.id;
-    } else {
-      tenantId = tenant.id;
-    }
+    const tenant = await prisma.tenant.upsert({
+      where: { slug: "padaria-teste-sync" },
+      update: { active: true },
+      create: {
+        slug: "padaria-teste-sync",
+        name: "Padaria Teste External Sync",
+        cnpj: "12.345.678/0001-90",
+        active: true,
+      },
+    });
+    tenantId = tenant.id;
+
+    await prisma.botSetting.upsert({
+      where: { tenantId },
+      update: { evolutionInstanceName: TEST_INSTANCE, isActive: true },
+      create: { tenantId, evolutionInstanceName: TEST_INSTANCE },
+    });
   });
 
   beforeEach(async () => {
@@ -39,11 +44,12 @@ describe("Evolution Webhook - External Device Message Synchronization", () => {
   });
 
   test("ignores fromMe message if message ID is registered in Redis (self-sent by Bot/Panel)", async () => {
-    const msgId = "TEST_MSG_SELF_123";
+    const msgId = `TEST_MSG_SELF_${Date.now()}_${Math.random()}`;
     await redisPub.set(redisKey("sent_msg", msgId), "1", "EX", 60);
 
     const payload = {
       event: "Message",
+      instance: TEST_INSTANCE,
       data: {
         key: {
           id: msgId,
@@ -80,12 +86,13 @@ describe("Evolution Webhook - External Device Message Synchronization", () => {
     assert.equal(customer, null);
   });
 
-  test("captures fromMe message from external WhatsApp device, saves as HUMAN and enables isHumanAttending", async () => {
-    const externalMsgId = "EXT_MSG_PHONE_APP_999";
+  test("captures fromMe message from external device, saves as HUMAN and silences the bot for a window", async () => {
+    const externalMsgId = `EXT_MSG_PHONE_APP_${Date.now()}_${Math.random()}`;
     const externalText = "Olá, estou respondendo diretamente do celular!";
 
     const payload = {
       event: "Message",
+      instance: TEST_INSTANCE,
       data: {
         key: {
           id: externalMsgId,
@@ -115,14 +122,17 @@ describe("Evolution Webhook - External Device Message Synchronization", () => {
     assert.equal(res.status, 200);
     assert.equal(json.status, "captured_external_human");
 
-    // Verify customer was created with isHumanAttending = true
+    // B5: o silêncio é uma janela, não um flag permanente — antes o bot nunca
+    // voltava a atender o cliente depois de uma resposta enviada pelo celular.
     const customer = await prisma.customer.findFirst({
       where: { tenantId, phone: testPhone },
       include: { chatMessages: true },
     });
 
     assert.ok(customer, "Customer should be created");
-    assert.equal(customer.isHumanAttending, true, "isHumanAttending must be true");
+    assert.equal(customer.isHumanAttending, false, "isHumanAttending é do botão 'assumir', não da resposta pelo celular");
+    assert.ok(customer.botSilencedUntil, "botSilencedUntil must be set");
+    assert.equal(customer.botSilencedUntil!.getTime() > Date.now(), true);
     assert.equal(customer.chatMessages.length, 1);
     assert.equal(customer.chatMessages[0].sender, "HUMAN");
     assert.equal(customer.chatMessages[0].content, externalText);
@@ -150,14 +160,15 @@ describe("Evolution Webhook - External Device Message Synchronization", () => {
     // 2. Incoming fromMe webhook with different ID but same text
     const payload = {
       event: "Message",
+      instance: TEST_INSTANCE,
       data: {
         key: {
-          id: "ANOTHER_ID_SAME_TEXT",
+          id: `ANOTHER_ID_SAME_TEXT_${Date.now()}_${Math.random()}`,
           remoteJid: `${testPhone}@s.whatsapp.net`,
           fromMe: true,
         },
         Info: {
-          Id: "ANOTHER_ID_SAME_TEXT",
+          Id: `ANOTHER_ID_SAME_TEXT_${Date.now()}_${Math.random()}`,
           Chat: `${testPhone}@s.whatsapp.net`,
           IsFromMe: true,
         },

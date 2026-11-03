@@ -2,6 +2,16 @@
 
 Este documento descreve todos os endpoints da API REST do sistema de atendimento de padaria.
 
+> **Autenticação (obrigatória desde a rodada de robustez).** `src/middleware.ts` não cobre `/api`;
+> cada rota se protege com `requireUser()` (`src/lib/utils/api-auth.ts`). O `tenantId` vem **sempre
+> do JWT** — `?tenantId=` na query é ignorado. Exceções públicas: `POST /api/auth/login`,
+> `POST /api/orders` (checkout do cardápio, que valida cliente/produto/adicional do tenant),
+> `POST /api/webhooks/evolution` (resolve o tenant pela instância) e `POST /api/chat/process-bot`
+> (exige o header `x-bot-secret`).
+>
+> Novos endpoints: `GET /api/alerts`, `PATCH /api/alerts/[id]`, `GET|POST /api/knowledge`,
+> `PATCH|DELETE /api/knowledge/[id]`.
+
 ---
 
 ## 🔐 Autenticação (`/api/auth`)

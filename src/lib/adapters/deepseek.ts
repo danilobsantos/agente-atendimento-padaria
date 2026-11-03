@@ -1,4 +1,5 @@
 import type { LLMService, LLMMessage, LLMResponse, LLMServiceConfig } from "@/lib/types/llm";
+import { toLlmError } from "@/lib/llm/errors";
 
 interface FormattedMessage {
   role: string;
@@ -95,11 +96,11 @@ export class DeepSeekAdapter implements LLMService {
         Authorization: `Bearer ${config.apiKey}`,
       },
       body: JSON.stringify(body),
+      ...(config.signal ? { signal: config.signal } : {}),
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`DeepSeek API error (${response.status}): ${error}`);
+      throw toLlmError("deepseek", response.status, await response.text());
     }
 
     const data = await response.json();
@@ -115,7 +116,14 @@ export class DeepSeekAdapter implements LLMService {
       }));
     }
 
-    return { text, tool_calls, raw: data };
+    const usage = data.usage
+      ? {
+          inputTokens: Number(data.usage.prompt_tokens ?? 0),
+          outputTokens: Number(data.usage.completion_tokens ?? 0),
+        }
+      : undefined;
+
+    return { text, tool_calls, raw: data, ...(usage ? { usage } : {}) };
   }
 }
 

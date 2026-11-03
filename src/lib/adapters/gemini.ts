@@ -1,4 +1,5 @@
 import type { LLMService, LLMMessage, LLMResponse, LLMServiceConfig } from "@/lib/types/llm";
+import { toLlmError } from "@/lib/llm/errors";
 
 // Gemini 3.x uses categorical thinkingLevel; 2.5 uses a numeric thinkingBudget.
 // Anything else (2.0/1.5/DeepSeek) does not accept thinkingConfig at all.
@@ -133,12 +134,12 @@ export class GeminiAdapter implements LLMService {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        ...(config.signal ? { signal: config.signal } : {}),
       }
     );
 
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Gemini API error (${response.status}): ${error}`);
+      throw toLlmError("gemini", response.status, await response.text());
     }
 
     const data = await response.json();
@@ -169,7 +170,15 @@ export class GeminiAdapter implements LLMService {
       );
     }
 
-    return { text, tool_calls, raw: data };
+    const usageMetadata = data.usageMetadata;
+    const usage = usageMetadata
+      ? {
+          inputTokens: Number(usageMetadata.promptTokenCount ?? 0),
+          outputTokens: Number(usageMetadata.candidatesTokenCount ?? 0),
+        }
+      : undefined;
+
+    return { text, tool_calls, raw: data, ...(usage ? { usage } : {}) };
   }
 }
 

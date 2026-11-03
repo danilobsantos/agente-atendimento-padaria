@@ -27,10 +27,16 @@ export interface LLMMessage {
   name?: string; // used when role is "tool"
 }
 
+export interface LLMUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
 export interface LLMResponse {
   text: string;
   tool_calls?: LLMToolCall[];
   raw?: unknown;
+  usage?: LLMUsage;
 }
 
 export interface LLMServiceConfig {
@@ -41,6 +47,8 @@ export interface LLMServiceConfig {
   thinkingConfig?: string;
   tools?: LLMTool[];
   responseSchema?: Record<string, unknown>;
+  /** AbortSignal para timeout — os adapters repassam ao fetch. */
+  signal?: AbortSignal;
 }
 
 export interface LLMService {
