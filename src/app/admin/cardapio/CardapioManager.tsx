@@ -303,6 +303,7 @@ export default function CardapioManager({ tenantId }: { tenantId: string }) {
                   {/* Item Image and Name info */}
                   <td className="p-4 pl-6 flex items-center gap-3">
                     {product.imageUrl ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
                       <img
                         src={product.imageUrl}
                         alt={product.name}

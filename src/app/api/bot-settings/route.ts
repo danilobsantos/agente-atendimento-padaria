@@ -1,17 +1,16 @@
 import { NextResponse } from "next/server";
+import fs from "fs";
+import path from "path";
 import { prisma } from "@/lib/prisma";
+import { requireUser, unauthorized } from "@/lib/utils/api-auth";
 
-// GET /api/bot-settings?tenantId=xxx
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const tenantId = searchParams.get("tenantId");
-
-  if (!tenantId) {
-    return NextResponse.json({ error: "tenantId is required" }, { status: 400 });
-  }
+// GET /api/bot-settings — configurações do bot do tenant autenticado
+export async function GET() {
+  const user = await requireUser();
+  if (!user) return unauthorized();
 
   const settings = await prisma.botSetting.findUnique({
-    where: { tenantId },
+    where: { tenantId: user.tenantId },
   });
 
   if (!settings) {
@@ -28,10 +27,12 @@ export async function GET(request: Request) {
 
 // PUT /api/bot-settings — Create or update bot settings
 export async function PUT(request: Request) {
+  const user = await requireUser();
+  if (!user) return unauthorized();
+
   try {
     const body = await request.json();
     const {
-      tenantId,
       llmProvider,
       llmApiKey,
       llmModel,
@@ -45,14 +46,11 @@ export async function PUT(request: Request) {
       isActive,
       evolutionInstanceName,
       evolutionInstanceToken,
+      monthlyBudgetCents,
     } = body;
 
-    if (!tenantId) {
-      return NextResponse.json({ error: "tenantId is required" }, { status: 400 });
-    }
-
     const settings = await prisma.botSetting.upsert({
-      where: { tenantId },
+      where: { tenantId: user.tenantId },
       update: {
         ...(llmProvider !== undefined && { llmProvider }),
         ...(llmApiKey !== undefined && llmApiKey !== "" && { llmApiKey }),
@@ -67,9 +65,10 @@ export async function PUT(request: Request) {
         ...(isActive !== undefined && { isActive }),
         ...(evolutionInstanceName !== undefined && { evolutionInstanceName: evolutionInstanceName?.trim() || null }),
         ...(evolutionInstanceToken !== undefined && evolutionInstanceToken !== "" && { evolutionInstanceToken: evolutionInstanceToken.trim() }),
+        ...(monthlyBudgetCents !== undefined && { monthlyBudgetCents: parseInt(monthlyBudgetCents) }),
       },
       create: {
-        tenantId,
+        tenantId: user.tenantId,
         llmProvider: llmProvider ?? "DEEPSEEK",
         llmApiKey: llmApiKey ?? "",
         llmModel: llmModel ?? "deepseek-v4-flash",
@@ -78,11 +77,12 @@ export async function PUT(request: Request) {
         sessionTimeout: sessionTimeout ? parseInt(sessionTimeout) : 1800,
         messageContextLimit: messageContextLimit ? parseInt(messageContextLimit) : 15,
         maxOutputTokens: maxOutputTokens ? parseInt(maxOutputTokens) : 4096,
-        temperature: temperature ? parseFloat(temperature) : 0.7,
+        temperature: temperature ? parseFloat(temperature) : 0.2,
         ...(thinkingConfig !== undefined && { thinkingConfig: thinkingConfig ? String(thinkingConfig) : null }),
         isActive: isActive ?? true,
         evolutionInstanceName: evolutionInstanceName?.trim() || null,
         evolutionInstanceToken: evolutionInstanceToken?.trim() || null,
+        monthlyBudgetCents: monthlyBudgetCents !== undefined ? parseInt(monthlyBudgetCents) : 0,
       },
     });
 
@@ -91,14 +91,14 @@ export async function PUT(request: Request) {
       llmApiKey: settings.llmApiKey ? "••••" + settings.llmApiKey.slice(-4) : "",
       evolutionInstanceToken: settings.evolutionInstanceToken ? "••••••••" : "",
     });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[BotSettings] Error:", error);
     try {
-      const fs = require("fs");
-      const path = require("path");
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      const errorStack = error instanceof Error ? error.stack || "no-stack" : "no-stack";
       fs.writeFileSync(
         path.join(process.cwd(), "settings-error.log"),
-        `${new Date().toISOString()}\nError: ${error?.message || error}\nStack: ${error?.stack || "no-stack"}\n`
+        `${new Date().toISOString()}\nError: ${errorMsg}\nStack: ${errorStack}\n`
       );
     } catch (fsErr) {
       console.error("Failed to write settings error log:", fsErr);

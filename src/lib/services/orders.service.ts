@@ -4,42 +4,52 @@ import { BotSession, OrderItemState, OrderItemAdditionalState } from "../types/s
 import { ProductsService } from "./products.service";
 import { SessionService } from "./session.service";
 import { redisChannel, redisPub } from "@/lib/redis";
+import { matchesProduct, normalize } from "@/lib/utils/fuzzy";
 
 type IncomingAdditional = { id?: string; name?: string; price?: number };
 
+interface CatalogExtra { id: string; name: string; price: number; categoryId: string | null }
+
 export class OrdersService {
-  // Resolve complementos against the catalog (authoritative id/price), matching the
-  // web flow. Falls back to name so a UUID mangled by the LLM can still match.
-  private static async resolveAdditionalItems(
-    tenantId: string,
-    incoming: IncomingAdditional[]
-  ): Promise<OrderItemAdditionalState[]> {
-    const locals = incoming.filter(a => a && (a.id || a.name));
-    if (locals.length === 0) return [];
+  // Resolve complementos against the catalog (authoritative id/price) — the LLM's
+  // price is never used. Cascade per incoming extra: id → exact normalized name,
+  // sempre preferindo categoria-specific → global → qualquer outra categoria
+  // (fallback p/ eco de carrinho) → fuzzy no escopo ("creme de nutella" → "Nutella").
+  static matchAdditionalItems(
+    extras: CatalogExtra[],
+    incomingList: IncomingAdditional[],
+    categoryId?: string | null
+  ): { matched: OrderItemAdditionalState[]; unmatched: string[] } {
+    const inCat = (e: CatalogExtra) => categoryId != null && e.categoryId === categoryId;
+    const isGlobal = (e: CatalogExtra) => e.categoryId === null;
+    const matched: OrderItemAdditionalState[] = [];
+    const unmatched: string[] = [];
 
-    const all = await prisma.additionalItem.findMany({ where: { tenantId, isAvailable: true } });
-    const byId = new Map(all.map(e => [e.id, e]));
-    const byName = new Map(all.map(e => [e.name.trim().toLowerCase(), e]));
-
-    return locals.flatMap((a) => {
-      const db = a.id
-        ? byId.get(a.id)
-        : undefined;
-      const match = db ?? (a.name ? byName.get(a.name.trim().toLowerCase()) : undefined);
-      if (!match) return [];
-      return [{
-        id: match.id,
-        name: match.name,
-        price: match.price,
-      }];
-    });
+    for (const a of incomingList) {
+      const q = a?.name?.trim() ? normalize(a.name.trim()) : "";
+      let hit: CatalogExtra | undefined;
+      if (a?.id) hit = extras.find(e => e.id === a.id);
+      if (!hit && q) {
+        const exact = (e: CatalogExtra) => normalize(e.name.trim()) === q;
+        const fuzzy = (e: CatalogExtra) =>
+          matchesProduct(normalize(e.name), "", q) || matchesProduct(q, "", normalize(e.name));
+        hit = extras.find(e => inCat(e) && exact(e))
+          ?? extras.find(e => isGlobal(e) && exact(e))
+          ?? extras.find(e => exact(e)) // outra categoria: eco de carrinho após editar menu
+          ?? extras.find(e => inCat(e) && fuzzy(e))
+          ?? extras.find(e => isGlobal(e) && fuzzy(e));
+      }
+      if (hit) matched.push({ id: hit.id, name: hit.name, price: hit.price });
+      else if (q) unmatched.push(a.name!.trim());
+    }
+    return { matched, unmatched };
   }
 
   static async updateOrderItems(
     session: BotSession,
     newItems: { id: string, quantity: number, notes?: string, additionalItems?: IncomingAdditional[] }[]
-  ): Promise<string> {
-    if (newItems.length === 0) return "Nenhum item válido para adicionar.";
+  ): Promise<{ text: string; warnings: string[] }> {
+    if (newItems.length === 0) return { text: "Nenhum item válido para adicionar.", warnings: [] };
 
     // Release a stale active order (DISPATCHED/READY/DELIVERED/CANCELLED) so items
     // land in a fresh cart instead of mutating a finished order.
@@ -67,25 +77,35 @@ export class OrdersService {
       }
     }
 
-    // Resolve complements once for the whole batch
-    const extraByItem = await Promise.all(
-      itemsToProcess.map(i => OrdersService.resolveAdditionalItems(session.tenantId, i.additionalItems || []))
-    );
+    // Resolve complements against the catalog (authoritative id/price), scoped per
+    // item inside the loop (the product's category). Deterministic order keeps the
+    // tie-break of same-name extras stable.
+    const hasExtras = itemsToProcess.some(i => i.additionalItems && i.additionalItems.length > 0);
+    const allExtras: CatalogExtra[] = hasExtras
+      ? await prisma.additionalItem.findMany({
+          where: { tenantId: session.tenantId, isAvailable: true },
+          orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+        })
+      : [];
 
     // products = the AUTHORITATIVE full cart (per prompt rule 1); REPLACE, not accumulate.
     const resolved: OrderItemState[] = [];
     const addedDescriptions: string[] = [];
+    const warnings: string[] = [];
 
     for (let i = 0; i < itemsToProcess.length; i++) {
       const newItem = itemsToProcess[i];
       const product = await ProductsService.getProductById(session.tenantId, newItem.id);
       if (!product) continue;
 
+      const extrasForItem = OrdersService.matchAdditionalItems(allExtras, newItem.additionalItems || [], product.categoryId);
+      warnings.push(...extrasForItem.unmatched.map(n => `Adicional "${n}" não disponível para ${product.name}`));
+
       const qty = Math.max(1, newItem.quantity || 1);
       const existing = session.order.items.find(i => i.productId === product.id);
       // ponytail: keep notes/extras the LLM didn't re-send so chosen options aren't dropped
       const notes = newItem.notes ?? existing?.notes;
-      const additionalItems = extraByItem[i].length > 0 ? extraByItem[i] : existing?.additionalItems;
+      const additionalItems = extrasForItem.matched.length > 0 ? extrasForItem.matched : existing?.additionalItems;
       const extrasTotal = (additionalItems ?? []).reduce((sum, a) => sum + a.price, 0);
 
       resolved.push({
@@ -99,7 +119,7 @@ export class OrdersService {
       addedDescriptions.push(`${qty}x ${product.name}`);
     }
 
-    if (resolved.length === 0) return "Não foi possível encontrar os produtos solicitados.";
+    if (resolved.length === 0) return { text: "Não foi possível encontrar os produtos solicitados.", warnings };
 
     session.order.items = resolved;
     await this.recalculateTotal(session);
@@ -135,9 +155,12 @@ export class OrdersService {
       );
     }
 
-    return addedDescriptions.length > 0
-      ? `Carrinho atual: ${addedDescriptions.join(", ")}. Total: R$ ${session.order.total.toFixed(2)}.`
-      : "Não foi possível encontrar os produtos solicitados.";
+    return {
+      text: addedDescriptions.length > 0
+        ? `Carrinho atual: ${addedDescriptions.join(", ")}. Total: R$ ${session.order.total.toFixed(2)}.`
+        : "Não foi possível encontrar os produtos solicitados.",
+      warnings,
+    };
   }
 
   static async recalculateTotal(session: BotSession) {

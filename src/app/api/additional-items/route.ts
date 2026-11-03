@@ -1,17 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { requireUser, unauthorized } from "@/lib/utils/api-auth";
 
-// GET /api/additional-items — List all additional items for a tenant
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const tenantId = searchParams.get("tenantId");
-
-  if (!tenantId) {
-    return NextResponse.json({ error: "tenantId is required" }, { status: 400 });
-  }
+// GET /api/additional-items
+export async function GET() {
+  const user = await requireUser();
+  if (!user) return unauthorized();
 
   const items = await prisma.additionalItem.findMany({
-    where: { tenantId },
+    where: { tenantId: user.tenantId },
     include: { category: true },
     orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
   });
@@ -21,20 +18,21 @@ export async function GET(request: Request) {
 
 // POST /api/additional-items — Create a new additional item
 export async function POST(request: Request) {
+  const user = await requireUser();
+  if (!user) return unauthorized();
+
   try {
     const body = await request.json();
-    const { tenantId, categoryId, name, description, price, isAvailable, sortOrder } = body;
+    const { categoryId, name, description, price, isAvailable, sortOrder } = body;
 
-    if (!tenantId || !name || price === undefined) {
-      return NextResponse.json(
-        { error: "tenantId, name, and price are required" },
-        { status: 400 }
-      );
+    if (!name || price === undefined) {
+      return NextResponse.json({ error: "name and price are required" }, { status: 400 });
     }
 
+    // Adicionais são lidos ao vivo por searchProducts (não passam pelo cache de 12h).
     const item = await prisma.additionalItem.create({
       data: {
-        tenantId,
+        tenantId: user.tenantId,
         categoryId,
         name,
         description,

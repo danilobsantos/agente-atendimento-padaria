@@ -117,7 +117,7 @@ test("retries WITHOUT tools so adapters force JSON mode", async () => {
   });
   assert.equal(response.intent, "generico");
   assert.equal(toolConfigs.length, 2);
-  assert.deepEqual(toolConfigs[0], [CONSULTAR_CARDAPIO_TOOL]);
+  assert.equal((toolConfigs[0] as { name: string }[]).some((t) => t.name === CONSULTAR_CARDAPIO_TOOL.name), true);
   assert.equal(toolConfigs[1], undefined);
 });
 

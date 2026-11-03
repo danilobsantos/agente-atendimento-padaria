@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { jwtVerify } from "jose";
+import type { JWTPayload } from "@/lib/auth";
 
 const SECRET_KEY = new TextEncoder().encode(
   process.env.JWT_SECRET || "default-fallback-super-secret-key-32-chars-long"
@@ -41,7 +42,8 @@ export async function middleware(request: NextRequest) {
 
     try {
       const { payload } = await jwtVerify(token, SECRET_KEY);
-      const role = (payload as any).role || "USER";
+      const jwtPayload = payload as unknown as JWTPayload;
+      const role = jwtPayload.role || "USER";
 
       // Restrict access to /admin/configuracoes and /admin/usuarios for non-admin users
       if (

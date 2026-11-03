@@ -2,18 +2,9 @@ import { createServer } from "http";
 import { Server } from "socket.io";
 import Redis from "ioredis";
 import "dotenv/config";
-import { PrismaClient } from "../generated/prisma/client";
-import { PrismaPg } from "@prisma/adapter-pg";
-import { Pool } from "pg";
-
 const PORT = parseInt(process.env.PORT || "3001");
 const redisUrl = process.env.REDIS_URL || "redis://localhost:6379";
 const redisPrefix = (process.env.REDIS_PREFIX || "ag_delivery").replace(/:+$/, "");
-const nextAppUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-
-const pool = new Pool({ connectionString: process.env.DATABASE_URL });
-const adapter = new PrismaPg(pool);
-const prisma = new PrismaClient({ adapter }) as unknown as InstanceType<typeof PrismaClient>;
 
 const httpServer = createServer((req, res) => {
   res.writeHead(200, { "Content-Type": "text/plain" });

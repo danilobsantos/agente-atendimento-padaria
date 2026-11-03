@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE "llm_calls" ALTER COLUMN "cost_cents" SET DATA TYPE DOUBLE PRECISION;

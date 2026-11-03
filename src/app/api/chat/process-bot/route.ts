@@ -9,6 +9,11 @@ import { sendChunkedResponse } from "@/lib/bot/message-sender";
 import { OrdersService } from "@/lib/services/orders.service";
 import { ProductsService } from "@/lib/services/products.service";
 import { BotState } from "@/lib/types/session";
+import { LlmBudgetExceededError } from "@/lib/llm/runner";
+import { isAuthorizedBotRequest, unauthorized } from "@/lib/utils/api-auth";
+import { raiseAlert } from "@/lib/services/alert.service";
+import { detectHumanRequest, detectOptOut, isExplicitConfirmation } from "@/lib/bot/guardrails/detect";
+import { checkPrices, stripDeliveryPromises } from "@/lib/bot/guardrails/price-guard";
 import type { LLMService } from "@/lib/types/llm";
 
 export interface BotRouteDeps {
@@ -19,17 +24,100 @@ export interface BotRouteDeps {
   params?: unknown;
 }
 
-// LLM-driven finalization guard: mirror the IntentRouter's explicit-confirm
-// words so a drift (LLM asks for confirmation but labels intent confirmar_pedido)
-// can't ship the order before the customer actually confirms.
-function isExplicitConfirmation(rawMessage: string): boolean {
-  const text = rawMessage.trim().toLowerCase();
-  if (/\bn(ao)?o\b/.test(text)) return false;
-  if (text === "sim" || text === "ok" || text === "pode") return true;
-  return /\b(confirmar|confirmo|pode mandar|pode ser|pode confirmar|t[áa] certo|manda ver|isso mesmo)\b/.test(text);
+const ENCOMENDA_RE = /\bencomend\w*\b/i;
+
+/**
+ * Guardrails determinísticos que rodam antes do LLM (custo zero de token).
+ * Devolvem a resposta pronta quando assumem o turno, ou null para seguir o fluxo.
+ *
+ * Pedido de humano e opt-out não podem depender do modelo: se ele errar, o
+ * cliente fica preso no bot ou recebe mensagem que pediu para não receber.
+ */
+async function handlePreLlmGuardrails(
+  message: string,
+  customer: { id: string; tenantId: string; name: string | null; phone: string },
+): Promise<string | null> {
+  if (detectHumanRequest(message)) {
+    await prisma.customer.update({ where: { id: customer.id }, data: { isHumanAttending: true } });
+    const { redisChannel, redisPub } = await import("@/lib/redis");
+    await redisPub.publish(
+      redisChannel("tenant", customer.tenantId, "customer"),
+      JSON.stringify({ customerId: customer.id, isHumanAttending: true }),
+    );
+    await raiseAlert({
+      tenantId: customer.tenantId,
+      kind: "handoff",
+      severity: "info",
+      title: "Cliente pediu atendimento humano",
+      body: message.slice(0, 500),
+      refKind: "customer",
+      refId: customer.id,
+    });
+    return "Claro! Já chamei um atendente para falar com você. Só um instante 😊";
+  }
+
+  if (detectOptOut(message)) {
+    // Silenciar o bot é a única leitura segura de "para de me mandar mensagem".
+    await prisma.customer.update({ where: { id: customer.id }, data: { isHumanAttending: true } });
+    const { redisChannel, redisPub } = await import("@/lib/redis");
+    await redisPub.publish(
+      redisChannel("tenant", customer.tenantId, "customer"),
+      JSON.stringify({ customerId: customer.id, isHumanAttending: true }),
+    );
+    await raiseAlert({
+      tenantId: customer.tenantId,
+      kind: "handoff",
+      severity: "warn",
+      title: "Cliente pediu para parar de receber mensagens",
+      body: message.slice(0, 500),
+      refKind: "customer",
+      refId: customer.id,
+    });
+    return "Tudo bem! Não vou mais te enviar mensagens automáticas. Se precisar de algo, é só chamar por aqui. 🙏";
+  }
+
+  return null;
 }
 
-const ENCOMENDA_RE = /\bencomend\w*\b/i;
+/** Tudo que a resposta pode legitimamente afirmar em R$. */
+function allowedPriceCents(
+  session: Awaited<ReturnType<typeof SessionService.getSession>>,
+  products: { price: number; extras?: { price: number }[] }[],
+  extraPrices: number[],
+  deliveryFee: number,
+): number[] {
+  const cents = new Set<number>([0]);
+  const add = (value: number) => {
+    if (Number.isFinite(value)) cents.add(Math.round(value * 100));
+  };
+
+  for (const p of products) {
+    add(p.price);
+    for (const e of p.extras ?? []) add(e.price);
+  }
+  for (const price of extraPrices) add(price);
+
+  for (const item of session.order.items) {
+    add(item.price);
+    add(item.price * item.quantity);
+    let withExtras = item.price;
+    for (const extra of item.additionalItems ?? []) {
+      add(extra.price);
+      withExtras += extra.price;
+    }
+    add(withExtras);
+    add(withExtras * item.quantity);
+  }
+
+  const subtotal = session.order.items.reduce((acc, it) => acc + it.price * it.quantity, 0);
+  const fee = session.orderType === "DELIVERY" ? deliveryFee : 0;
+  add(subtotal);
+  add(deliveryFee);
+  add(fee);
+  add(subtotal + fee);
+
+  return [...cents];
+}
 
 function isEncomendaRequest(message: string): boolean {
   return ENCOMENDA_RE.test(message.trim());
@@ -66,6 +154,12 @@ async function triggerEncomendaHandover(customer: {
 }
 
 export async function POST(request: Request, deps: BotRouteDeps = {}) {
+  if (!isAuthorizedBotRequest(request)) return unauthorized();
+
+  // Tracked outside the try so a crash mid-turn can't leave the debounce lock
+  // behind (with a 2-minute TTL, that would mute the customer for 2 minutes).
+  let heldLock: { tenantId: string; customerId: string } | null = null;
+
   try {
     const { customerId, message } = await request.json();
 
@@ -83,7 +177,13 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
     if (!customer) return NextResponse.json({ error: "Customer not found" }, { status: 404 });
 
     const botSetting = customer.tenant.botSetting;
-    if (!botSetting || !botSetting.isActive || customer.isHumanAttending) {
+    const silencedUntil = customer.botSilencedUntil;
+    if (
+      !botSetting ||
+      !botSetting.isActive ||
+      customer.isHumanAttending ||
+      (silencedUntil !== null && silencedUntil > new Date())
+    ) {
       return NextResponse.json({ status: "skipped", reason: "bot_inactive_or_human_handover" });
     }
 
@@ -95,11 +195,13 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
     // This prevents multiple LLM calls if the user sends 3 fast messages. 
     // It locks and queues them, then the single locked process consumes the queue.
     const debounceSeconds = botSetting.debounceSeconds ?? 2;
-    // Lock TTL must outlive the debounce wait + processing (releaseLock clears it on normal exit)
-    const isFirst = await MessageBuffer.pushMessage(customer.tenantId, customerId, message, Math.max(3, debounceSeconds + 15));
+    // O TTL precisa cobrir o turno inteiro (até 4 rodadas de tool + retry), não
+    // só a janela de debounce. releaseLock limpa no fim do turno.
+    const isFirst = await MessageBuffer.pushMessage(customer.tenantId, customerId, message, 120);
     if (!isFirst) {
       return NextResponse.json({ status: "queued", reason: "debounce_active" });
     }
+    heldLock = { tenantId: customer.tenantId, customerId };
 
     // Wait a brief moment to allow rapid subsequent messages to queue up
     await new Promise((resolve) => setTimeout(resolve, deps.debounceMs ?? debounceSeconds * 1000));
@@ -124,10 +226,14 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
     // Only classify delivery/pickup/order-type in the initial messages of the conversation
     const isInitial = session.state === BotState.START || session.state === BotState.SHOW_MENU;
 
-    const routerResponse = await IntentRouter.route(fullMessage, session);
+    const guardrailReply = await handlePreLlmGuardrails(fullMessage, customer);
+    const routerResponse = guardrailReply
+      ? { bypassed: true, reply: guardrailReply }
+      : await IntentRouter.route(fullMessage, session);
 
     let finalBotText = routerResponse.reply || "";
     let compressedContext = finalBotText;
+    const pendingWarnings: string[] = [];
 
     if (!routerResponse.bypassed) {
       // Encomenda é decisão determinística (palavra-chave), não depende do LLM
@@ -168,7 +274,7 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
             model: botSetting.llmModel,
             maxOutputTokens: botSetting.maxOutputTokens,
             messageContextLimit: botSetting.messageContextLimit,
-            temperature: botSetting.temperature ?? 0.7,
+            temperature: botSetting.temperature ?? 0.2,
             ...(botSetting.thinkingConfig && { thinkingConfig: botSetting.thinkingConfig }),
             systemPrompt: [
               botSetting.systemPrompt || "Você é um assistente virtual.",
@@ -236,7 +342,8 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
             // never as a machine line after each addition. A stale active order
             // (DISPATCHED/READY/DELIVERED/CANCELLED) is released internally, so items
             // simply start a new cart instead of being refused.
-            await OrdersService.updateOrderItems(session, validProducts);
+            const orderResult = await OrdersService.updateOrderItems(session, validProducts);
+            pendingWarnings.push(...orderResult.warnings);
           }
 
           // 3. Handle specific intents
@@ -247,25 +354,26 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
           } else if (agentResponse.intent === "confirmar_pedido") {
             try {
               const orderId = await OrdersService.finalizeOrder(session);
-              session.state = BotState.START;
+              session.state = BotState.FINISHED;
               session.activeOrderId = orderId;
               const { formatOrderNumber } = await import("@/lib/utils/format-order");
-              // We DO NOT clear the session here anymore. We keep it alive so the context window remains.
               finalBotText += `\n\n*(Pedido ${formatOrderNumber(orderId)} gerado com sucesso!)*`;
-            } catch (e: any) {
+            } catch (e: unknown) {
               console.error("[Bot Process] Error finalizing order:", e);
-              finalBotText = `Ops! Não consegui finalizar o seu pedido: ${e.message}\nPor favor, informe os dados que faltam para que eu possa concluir.`;
+              const errorMsg = e instanceof Error ? e.message : String(e);
+              finalBotText = `Ops! Não consegui finalizar o seu pedido: ${errorMsg}\nPor favor, informe os dados que faltam para que eu possa concluir.`;
             }
           } else if (agentResponse.intent === "cancelar_pedido") {
             session.state = BotState.CANCELLED;
-            if (session.activeOrderId) {
+            const targetOrderId = session.activeOrderId || customer.activeOrderId;
+            if (targetOrderId) {
               const existingOrder = await prisma.order.findUnique({
-                where: { id: session.activeOrderId },
+                where: { id: targetOrderId },
                 select: { status: true }
               });
               if (existingOrder && ["PENDING", "CONFIRMED", "PREPARING"].includes(existingOrder.status)) {
                 await prisma.order.update({
-                  where: { id: session.activeOrderId },
+                  where: { id: targetOrderId },
                   data: { status: "CANCELLED" }
                 });
                 await prisma.customer.update({
@@ -275,7 +383,7 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
                 const { redisChannel, redisPub } = await import("@/lib/redis");
                 await redisPub.publish(
                   redisChannel("tenant", session.tenantId, "order"),
-                  JSON.stringify({ orderId: session.activeOrderId, status: "CANCELLED", event: "ORDER_STATUS_UPDATED" })
+                  JSON.stringify({ orderId: targetOrderId, status: "CANCELLED", event: "ORDER_STATUS_UPDATED" })
                 );
               }
             }
@@ -284,7 +392,14 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
 
           // Injeção de Resumo: Se o pedido tem itens e forma de pagamento, e endereço (se delivery),
           // e ainda não foi finalizado nem cancelado, injetamos o resumo do carrinho para o cliente validar.
-          const isReadyToConfirm = session.order.items.length > 0 && session.payment && (session.orderType !== 'DELIVERY' || session.customer.address);
+          const isReadyToConfirm =
+            session.order.items.length > 0 &&
+            session.payment &&
+            (session.orderType !== 'DELIVERY' || session.customer.address) &&
+            session.state !== BotState.START &&
+            session.state !== BotState.SHOW_MENU &&
+            session.state !== BotState.FINISHED &&
+            session.state !== BotState.CANCELLED;
           if (isReadyToConfirm && agentResponse.intent !== "confirmar_pedido" && agentResponse.intent !== "cancelar_pedido") {
             const hasSummary = finalBotText.includes("Resumo") || finalBotText.includes("Total:");
             if (!hasSummary) {
@@ -300,6 +415,9 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
                 summary += `- ${it.quantity}x ${it.name}${extras}: R$ ${(it.price * it.quantity).toFixed(2)}\n`;
               });
               summary += `\n*Subtotal:* R$ ${subtotal.toFixed(2)}`;
+              if (pendingWarnings.length > 0) {
+                summary += `\n${pendingWarnings.map(w => `⚠️ ${w}`).join("\n")}`;
+              }
               if (session.orderType === 'DELIVERY') {
                 summary += `\n*Taxa de entrega:* R$ ${deliveryFee.toFixed(2)}`;
                 summary += `\n*Endereço:* ${session.customer.address}`;
@@ -314,16 +432,50 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
             }
           }
 
-          compressedContext = JSON.stringify({
-            intent: agentResponse.intent,
-            cart: session.order.items.map(i => `${i.quantity}x ${i.name}`),
-            customerInfo: {
-              name: session.customer.name || "",
-              address: session.customer.address || "",
-              payment: session.payment || ""
-            },
-            botMessage: finalBotText.substring(0, 150)
-          });
+          // ── Guardrails de saída: rodam depois de tudo montado (LLM + resumo),
+          // antes de enviar. Vetam o que custa dinheiro ou gera disputa.
+          const extraPrices = (
+            await prisma.additionalItem.findMany({
+              where: { tenantId: customer.tenantId },
+              select: { price: true },
+            })
+          ).map((e) => e.price);
+
+          const priceCheck = checkPrices(
+            finalBotText,
+            allowedPriceCents(session, products, extraPrices, customer.tenant.deliveryFee || 0),
+          );
+          if (!priceCheck.ok) {
+            await raiseAlert({
+              tenantId: customer.tenantId,
+              kind: "preco_incoerente",
+              severity: "critical",
+              title: "Resposta citou preço que não existe no catálogo",
+              body: `Valores sem correspondência (centavos): ${priceCheck.offending.join(", ")}\n\nMensagem vetada:\n${finalBotText.slice(0, 1500)}`,
+              refKind: "customer",
+              refId: customer.id,
+            });
+            finalBotText = "Deixa eu confirmar os valores certinho com a equipe e já te respondo por aqui. 🙏";
+          }
+
+          const promiseCheck = stripDeliveryPromises(finalBotText);
+          if (promiseCheck.removed) {
+            await raiseAlert({
+              tenantId: customer.tenantId,
+              kind: "prazo_inventado",
+              severity: "warn",
+              title: "Resposta prometeu prazo de entrega",
+              body: `Prazo removido da mensagem:\n${finalBotText.slice(0, 1500)}`,
+              refKind: "customer",
+              refId: customer.id,
+            });
+            finalBotText =
+              promiseCheck.text.trim() || "Deixa eu confirmar o prazo com a cozinha e já te respondo por aqui.";
+          }
+
+          // B6: o contexto guardava um JSON truncado em 150 chars — o bot não
+          // conseguia reler o que ele mesmo disse. Guarda a mensagem real.
+          compressedContext = finalBotText;
         } // else: normal bot flow (skip order processing for ENCOMENDA)
       } // else: caminho LLM (encomenda por palavra-chave já tratada acima)
     }
@@ -337,27 +489,68 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
     await MessageBuffer.releaseLock(customer.tenantId, customerId);
 
     // 6. Send response (auto-splits long messages with typing delays)
-    await (deps.send ?? sendChunkedResponse)({
-      phone: customer.phone,
-      customerId: customer.id,
-      tenantId: customer.tenantId,
-      customerName: customer.name || customer.phone,
-      isHumanAttending: customer.isHumanAttending,
-      text: finalBotText,
-    });
+    try {
+      await (deps.send ?? sendChunkedResponse)({
+        phone: customer.phone,
+        customerId: customer.id,
+        tenantId: customer.tenantId,
+        customerName: customer.name || customer.phone,
+        isHumanAttending: customer.isHumanAttending,
+        text: finalBotText,
+      });
+    } catch (sendErr: unknown) {
+      const sendErrMsg = sendErr instanceof Error ? sendErr.message : String(sendErr);
+      console.warn(`[Bot Process] Warning sending final bot text to ${customer.phone}:`, sendErrMsg);
+    }
 
     await evolutionGo.sendPresence(customer.phone, "paused").catch(() => { });
 
     return NextResponse.json({ status: "success", response: finalBotText });
-  } catch (error: any) {
+  } catch (error: unknown) {
     console.error("[Bot Process] Error:", error);
+
+    // Libera o debounce mesmo no erro: com TTL de 120s, o lock preso deixaria o
+    // cliente sem resposta por dois minutos.
+    if (heldLock) {
+      await MessageBuffer.releaseLock(heldLock.tenantId, heldLock.customerId).catch(() => {});
+    }
+
+    if (error instanceof LlmBudgetExceededError) {
+      // O teto é uma válvula de segurança deliberada: o dono precisa agir, e o
+      // alerta é a única forma de ele saber. Sem LLM não há resposta ao cliente.
+      if (heldLock) {
+        await raiseAlert({
+          tenantId: heldLock.tenantId,
+          kind: "orcamento_estourado",
+          severity: "critical",
+          title: "Teto mensal de gasto com IA atingido — bot parou de responder",
+          body: error.message,
+        });
+      }
+      return NextResponse.json({ error: "budget_exceeded" }, { status: 429 });
+    }
+
+    if (heldLock) {
+      await raiseAlert({
+        tenantId: heldLock.tenantId,
+        kind: "bot_erro",
+        severity: "warn",
+        title: "Erro ao processar mensagem do bot",
+        body: `${error instanceof Error ? (error.stack ?? error.message) : String(error)}`.slice(0, 4000),
+        refKind: "customer",
+        refId: heldLock.customerId,
+      });
+    }
+
     if (process.env.NODE_ENV !== "test") {
       try {
-        const fs = require("fs");
-        const path = require("path");
+        const errorMsg = error instanceof Error ? error.message : String(error);
+        const errorStack = error instanceof Error ? error.stack || "no-stack" : "no-stack";
+        const fs = await import("fs");
+        const path = await import("path");
         fs.writeFileSync(
           path.join(process.cwd(), "bot-error.log"),
-          `${new Date().toISOString()}\\nError: ${error?.message || error}\\nStack: ${error?.stack || "no-stack"}\\n`,
+          `${new Date().toISOString()}\nError: ${errorMsg}\nStack: ${errorStack}\n`,
           { flag: "a" }
         );
       } catch (fsErr) {

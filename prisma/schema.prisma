@@ -10,17 +10,17 @@ datasource db {
 // ─── Multi-tenant ───────────────────────────────────────────
 
 model Tenant {
-  id        String   @id @default(uuid())
-  name      String
-  slug      String   @unique
-  active    Boolean  @default(true)
-  cnpj      String?  @map("cnpj")
-  address   String?  @map("address")
+  id          String   @id @default(uuid())
+  name        String
+  slug        String   @unique
+  active      Boolean  @default(true)
+  cnpj        String?  @map("cnpj")
+  address     String?  @map("address")
   phone       String?  @map("phone")
   logoUrl     String?  @map("logo_url")
   deliveryFee Float    @default(0) @map("delivery_fee")
   createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   categories      Category[]
   products        Product[]
@@ -29,6 +29,9 @@ model Tenant {
   customers       Customer[]
   users           User[]
   botSetting      BotSetting?
+  knowledge       KnowledgeEntry[]
+  alerts          Alert[]
+  llmCalls        LlmCall[]
 
   @@map("tenants")
 }
@@ -56,9 +59,11 @@ model BotSetting {
   temperature         Float       @default(0.2) @map("temperature")
   thinkingConfig      String?     @map("thinking_config")
   isActive            Boolean     @default(true) @map("is_active")
+  // Teto mensal de gasto de API em centavos. 0 = sem limite.
+  monthlyBudgetCents  Int         @default(0) @map("monthly_budget_cents")
 
-  evolutionInstanceName  String?     @map("evolution_instance_name")
-  evolutionInstanceToken String?     @map("evolution_instance_token")
+  evolutionInstanceName  String? @map("evolution_instance_name")
+  evolutionInstanceToken String? @map("evolution_instance_token")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -75,8 +80,11 @@ model Customer {
 
   phone            String
   name             String?
-  isHumanAttending Boolean @default(false) @map("is_human_attending")
-  activeOrderId    String? @map("active_order_id")
+  isHumanAttending Boolean   @default(false) @map("is_human_attending")
+  // Janela de silêncio do bot: substitui o silêncio permanente que o webhook
+  // aplicava quando alguém respondia pelo celular (B5).
+  botSilencedUntil DateTime? @map("bot_silenced_until")
+  activeOrderId    String?   @map("active_order_id")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -220,10 +228,10 @@ model OrderItem {
   productId String  @map("product_id")
   product   Product @relation(fields: [productId], references: [id], onDelete: Restrict)
 
-  quantity         Int
-  price            Float
-  notes            String?
-  additionalItems  Json?  @map("additional_items")
+  quantity        Int
+  price           Float
+  notes           String?
+  additionalItems Json?   @map("additional_items")
 
   @@map("order_items")
 }
@@ -248,4 +256,82 @@ model User {
   updatedAt    DateTime @updatedAt @map("updated_at")
 
   @@map("users")
+}
+
+// ─── Observabilidade de IA ──────────────────────────────────
+// Uma linha por chamada de LLM, gravada ANTES de relançar o erro: a tabela que
+// deveria explicar não pode ficar vazia justo no caso que precisa de explicação.
+// `costCents` é nullable — 0 mentiria "de graça" para um modelo fora da tabela.
+
+model LlmCall {
+  id       String @id @default(uuid())
+  tenantId String @map("tenant_id")
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  customerId   String? @map("customer_id")
+  provider     String
+  model        String
+  purpose      String  @default("agent_turn")
+  inputTokens  Int     @default(0) @map("input_tokens")
+  outputTokens Int     @default(0) @map("output_tokens")
+  latencyMs    Int     @default(0) @map("latency_ms")
+  status       String  @default("ok")
+  errorCode    String? @map("error_code")
+  // Centavos de dólar (float: um turno custa fração de centavo). NULL quando
+  // o modelo não está na tabela de preço.
+  costCents    Float?  @map("cost_cents")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, status, createdAt])
+  @@map("llm_calls")
+}
+
+// ─── Central de alertas ─────────────────────────────────────
+// Dedup por (kind, refKind, refId) com status aberto: alarme repetido treina o
+// dono a ignorar o alarme certo.
+
+model Alert {
+  id       String @id @default(uuid())
+  tenantId String @map("tenant_id")
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  kind     String
+  severity String  @default("warn") // info | warn | critical
+  title    String
+  body     String? @db.Text
+  refKind  String? @map("ref_kind")
+  refId    String? @map("ref_id")
+  status   String  @default("open") // open | ack | resolved
+
+  createdAt  DateTime  @default(now()) @map("created_at")
+  resolvedAt DateTime? @map("resolved_at")
+
+  @@index([tenantId, status, createdAt])
+  @@index([tenantId, kind, refKind, refId])
+  @@map("alerts")
+}
+
+// ─── Base de conhecimento ───────────────────────────────────
+// Regras do negócio + FAQ. Sem embeddings de propósito: ~20 entradas não
+// justificam pgvector, e a busca fuzzy já existe em ProductsService.
+
+model KnowledgeEntry {
+  id       String @id @default(uuid())
+  tenantId String @map("tenant_id")
+  tenant   Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  question String
+  answer   String   @db.Text
+  keywords String[] @default([])
+  category String?  @default("Geral")
+  priority Int      @default(0)
+  isActive Boolean  @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([tenantId, isActive])
+  @@map("knowledge_entries")
 }

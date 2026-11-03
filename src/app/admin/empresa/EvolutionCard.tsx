@@ -216,6 +216,7 @@ export default function EvolutionCard() {
             ) : (
               <>
                 {qrBase64 ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
                   <img
                     src={qrBase64}
                     alt="QR code do WhatsApp"

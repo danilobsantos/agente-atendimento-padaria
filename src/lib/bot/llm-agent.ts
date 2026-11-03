@@ -2,21 +2,20 @@ import { z } from "zod";
 import { createLLMService } from "../adapters/factory";
 import { BotSession } from "../types/session";
 import type { LLMProvider } from "@/generated/prisma/client";
-import type { LLMTool, LLMToolCall, LLMMessage, LLMService } from "@/lib/types/llm";
+import type { LLMTool, LLMMessage, LLMResponse, LLMService, LLMServiceConfig } from "@/lib/types/llm";
 import type { SearchProduct } from "../services/products.service";
+import { runLlm, LlmBudgetExceededError } from "@/lib/llm/runner";
+import { ToolBreaker } from "./tool-breaker";
+import {
+  TOOL_DEFINITIONS,
+  executeTool as executeRegisteredTool,
+  type ToolContext,
+  type ToolExecutor,
+} from "./tools";
+import { cardapioTool } from "./tools/cardapio";
 
-export const CONSULTAR_CARDAPIO_TOOL: LLMTool = {
-  name: "consultar_cardapio",
-  description:
-    "Consulta interna do cardápio (nomes, variações, complementos e preços) para responder dúvidas específicas. Use ANTES de responder sobre preços, variações ou disponibilidade e antes de montar o campo products. Retorna itens com IDs curtos. IMPORTANTE: os resultados são para SUA pesquisa — nunca liste os itens na mensagem para o cliente.",
-  parameters: {
-    type: "object",
-    properties: {
-      busca: { type: "string", description: "Termo de busca no nome do produto (ex: 'pão', 'bolo de fubá')." },
-      categoria: { type: "string", description: "Nome da categoria (ex: 'padaria', 'bolos')." },
-    },
-  },
-};
+/** Mantido para compatibilidade: é a definição da tool, não uma cópia. */
+export const CONSULTAR_CARDAPIO_TOOL: LLMTool = cardapioTool.definition;
 
 const MAX_TOOL_ROUNDS = 4;
 
@@ -95,11 +94,49 @@ export interface LLMAgentDeps {
   llmService?: LLMService;
   searchProducts?: (tenantId: string, opts: { busca?: string; categoria?: string }) => Promise<SearchProduct[]>;
   uuidToShort?: Map<string, string>;
+  executeTool?: ToolExecutor;
 }
 
 export interface AgentProcessResult {
   response: AgentResponse;
   idMap: Map<string, string>;
+}
+
+type GenerateFn = (messages: LLMMessage[], config: LLMServiceConfig) => Promise<LLMResponse>;
+
+/**
+ * Converte o histórico com function-calling em texto antes do retry sem tools.
+ *
+ * Necessário porque o retry roda sem `tools`: um histórico com `role:"tool"`
+ * órfão faz o Gemini responder 400, e o DeepSeek perde o modo JSON. Achatar
+ * mantém o que a ferramenta descobriu sem exigir que a ferramenta exista.
+ */
+export function flattenToolHistory(messages: LLMMessage[]): LLMMessage[] {
+  const out: LLMMessage[] = [];
+  for (let i = 0; i < messages.length; i++) {
+    const msg = messages[i];
+
+    if (msg.role === "assistant" && msg.tool_calls && msg.tool_calls.length > 0) {
+      const results = new Map<string, string>();
+      let j = i + 1;
+      while (j < messages.length && messages[j].role === "tool") {
+        results.set(messages[j].tool_call_id ?? "", messages[j].content);
+        j += 1;
+      }
+      out.push({
+        role: "assistant",
+        content: msg.tool_calls
+          .map((tc) => `[ferramenta ${tc.name}(${tc.arguments}) → ${results.get(tc.id) ?? "sem resultado"}]`)
+          .join("\n"),
+      });
+      i = j - 1;
+      continue;
+    }
+
+    if (msg.role === "tool") continue; // órfã: o par assistant já foi achatado
+    out.push(msg);
+  }
+  return out;
 }
 
 export class LLMAgent {
@@ -110,10 +147,22 @@ export class LLMAgent {
     dep: LLMAgentDeps = {}
   ): Promise<AgentProcessResult> {
     const llmService = dep.llmService ?? createLLMService(config.provider);
-    const searchProducts = dep.searchProducts ?? (async (tenantId, opts) => {
-      const { ProductsService } = await import("../services/products.service");
-      return ProductsService.searchProducts(tenantId, opts);
-    });
+
+    // Em produção toda chamada passa pelo runner (timeout, retry, telemetria e
+    // gate de orçamento). Em teste, o serviço injetado é chamado direto — unit
+    // test não deve precisar de banco para validar o loop de tools.
+    const generate: GenerateFn = dep.llmService
+      ? (messages, cfg) => dep.llmService!.generate(messages, cfg)
+      : (messages, cfg) =>
+          runLlm({
+            tenantId: session.tenantId,
+            customerId: session.customerId,
+            service: llmService,
+            messages,
+            config: cfg,
+            provider: String(config.provider),
+          });
+
     const menuUrl = config.menuUrl.replace(/\/+$/, "");
 
     const systemPrompt = `${config.systemPrompt}
@@ -137,7 +186,7 @@ Assistant: {"intent":"confirmar_pedido","orderType":"NONE","customerInfo":{"name
 ## REGRAS CRÍTICAS (OBRIGATÓRIAS)
 1. CARRINHO (products): O array "products" é o CARRINHO COMPLETO. Ele DEVE conter TODOS os itens, incluindo os que já estão no carrinho atual (mostrado abaixo). SE VOCÊ OMITIR UM ITEM, ELE SERÁ REMOVIDO DO CARRINHO.
 2. FERRAMENTA consultar_cardapio: SEMPRE chame essa ferramenta ANTES de adicionar algo no array products ou de responder preços. NUNCA invente nomes, preços ou IDs. Use apenas os IDs curtos retornados pela ferramenta.
-3. SEM INVENÇÃO: Adicione APENAS itens que o cliente EXPLICITAMENTE pediu. Se a ferramenta retornar 5 opções, escolha apenas a que o cliente falou. Complements/adicionais vão no campo "additionalItems" do produto, nunca como um novo produto.
+3. SEM INVENÇÃO: Adicione APENAS itens que o cliente EXPLICITAMENTE pediu. Se a ferramenta retornar 5 opções, escolha apenas a que o cliente falou. Complements/adicionais vão no campo "additionalItems" do produto, nunca como um novo produto. Em "additionalItems", use APENAS adicionais do campo "extras" do próprio produto retornado pela ferramenta, copiando id e name EXATAMENTE. Se o adicional não estiver nos extras desse produto, não o envie.
 4. MENSAGEM CURTA E LIMPA: A string "message" será enviada no WhatsApp. Seja amigável mas MUITO BREVE (max 400 chars). NUNCA liste os produtos do carrinho na "message" durante a conversa (o sistema faz isso no final). NUNCA mande totais ou confirme itens adicionados, apenas continue a conversa perguntando o que falta.
 
 ## REGRAS DE FLUXO DE PEDIDO
@@ -145,6 +194,8 @@ Assistant: {"intent":"confirmar_pedido","orderType":"NONE","customerInfo":{"name
 6. INTENT "confirmar_pedido": USE APENAS se o usuário explicitamente confirmou o resumo (ex: "sim", "pode mandar"). Se VOCÊ está perguntando se pode confirmar, a intent é "generico" ou "adicionar_itens". NUNCA use "confirmar_pedido" se faltar endereço (para DELIVERY) ou pagamento.
 7. TIPO DE PEDIDO (orderType): Se o cliente pedir algo por chat, classifique como "DELIVERY", "PICKUP" ou "ENCOMENDA" no início da conversa. Se ainda não souber, pergunte. Depois de definido, use sempre "NONE". Se o cliente pedir para ver o cardápio (sem especificar itens), envie APENAS o link: ${menuUrl}/cardapio e a intent "fora_escopo".
 8. QUANTIDADE POR VALOR: Se pedir "10 reais de pão", pergunte a quantidade em unidades.
+9. POLÍTICAS DA LOJA: para horário, taxa/área de entrega, pagamento, valor mínimo, prazo ou cancelamento, chame "consultar_conhecimento" ANTES de responder. Se a ferramenta não encontrar, diga que vai confirmar com a equipe — NUNCA invente prazo, taxa ou política.
+10. TOTAIS: para responder "quanto deu", chame "consultar_pedido_atual". Não calcule preços de cabeça.
 
 ## CONTEXTO ATUAL
 Customer name: ${session.customer.name || "Not provided"}
@@ -156,7 +207,6 @@ Payment: ${session.payment || "Not provided"}
 ${session.activeOrderId ? `\nAVISO: O cliente já tem um pedido ativo sendo preparado. Adicione novos itens com intent 'adicionar_itens'.` : ""}
 `;
 
-    // Use messageContextLimit from config (from the admin panel)
     const recentContext = session.context.slice(-config.messageContextLimit);
 
     const messages: LLMMessage[] = [
@@ -165,7 +215,7 @@ ${session.activeOrderId ? `\nAVISO: O cliente já tem um pedido ativo sendo prep
       { role: "user", content: message }
     ];
 
-    const commonConfig = {
+    const commonConfig: LLMServiceConfig = {
       apiKey: config.apiKey,
       model: config.model,
       maxOutputTokens: config.maxOutputTokens,
@@ -173,6 +223,16 @@ ${session.activeOrderId ? `\nAVISO: O cliente já tem um pedido ativo sendo prep
       ...(config.thinkingConfig && { thinkingConfig: config.thinkingConfig }),
       responseSchema: RESPONSE_JSON_SCHEMA,
     };
+
+    const toolCtx: ToolContext = {
+      tenantId: session.tenantId,
+      customerId: session.customerId,
+      session,
+      ...(dep.uuidToShort ? { uuidToShort: dep.uuidToShort } : {}),
+      ...(dep.searchProducts ? { searchProducts: dep.searchProducts } : {}),
+    };
+    const runTool = dep.executeTool ?? executeRegisteredTool;
+    const breaker = new ToolBreaker();
 
     const idMap = new Map<string, string>();
     const fallbackResponse: AgentResponse = {
@@ -182,13 +242,10 @@ ${session.activeOrderId ? `\nAVISO: O cliente já tem um pedido ativo sendo prep
     };
 
     try {
-      let response = await llmService.generate(messages, {
-        ...commonConfig,
-        tools: [CONSULTAR_CARDAPIO_TOOL],
-      });
+      let response = await generate(messages, { ...commonConfig, tools: TOOL_DEFINITIONS });
 
-      // Tool loop: execute tools, feed results back, re-ask until the model answers
       let rounds = 0;
+      let breakerTripped = false;
       while (response.tool_calls && response.tool_calls.length > 0 && rounds < MAX_TOOL_ROUNDS) {
         const toolMessages: LLMMessage[] = [
           {
@@ -204,42 +261,51 @@ ${session.activeOrderId ? `\nAVISO: O cliente já tem um pedido ativo sendo prep
         ];
 
         for (const tc of response.tool_calls) {
-          const { content, ids } = await LLMAgent.executeTool(session.tenantId, tc, searchProducts, dep.uuidToShort);
-          for (const [shortId, uuid] of ids) idMap.set(shortId, uuid);
+          if (breaker.isBlocked(tc.name, tc.arguments)) {
+            breakerTripped = true;
+            continue;
+          }
+          const result = await runTool(toolCtx, tc.name, tc.arguments);
+          breaker.record(tc.name, tc.arguments, result.ok);
+          for (const [shortId, uuid] of result.ids ?? []) idMap.set(shortId, uuid);
           toolMessages.push({
             role: "tool",
             tool_call_id: tc.id,
             name: tc.name,
-            content,
+            content: result.content,
           });
         }
 
         messages.push(...toolMessages);
         rounds += 1;
-        response = await llmService.generate(messages, {
-          ...commonConfig,
-          tools: [CONSULTAR_CARDAPIO_TOOL],
-        });
+
+        // Tool quebrada: mais uma rodada só gastaria token para chegar à mesma
+        // conclusão. Vai direto para o parse/resposta.
+        if (breakerTripped) break;
+
+        response = await generate(messages, { ...commonConfig, tools: TOOL_DEFINITIONS });
       }
 
-      const startTime = Date.now();
-      const latency = Date.now() - startTime;
-      console.log(`[LLM Metrics] Model: ${config.model} | Latency: ${latency}ms | Response length: ${response.text.length} | Tool rounds: ${rounds}`);
-      console.log(`[LLMAgent] Raw response: ${response.text.substring(0, 300)}`);
+      console.log(`[LLMAgent] tool rounds=${rounds} breaker=${breakerTripped} response_len=${response.text.length}`);
 
       const parsed = LLMAgent.tryParse(response.text);
       if (parsed) return { response: parsed, idMap };
 
-      // JSON is not force-enforced when tools are present, so retry WITHOUT tools
-      // (adapters re-enable JSON mode when tools are absent) and ask for pure JSON.
-      messages.push({ role: "user", content: "Responda APENAS com o objeto JSON no formato do schema. Nada além do JSON. Sem texto, sem marcação, sem explicação." });
-      const retry = await llmService.generate(messages, commonConfig);
-      console.log(`[LLMAgent] Retry response: ${retry.text.substring(0, 300)}`);
+      // Retry sem tools: os adapters reativam o modo JSON nesse caminho, e o
+      // histórico é achatado para não sobrar role:"tool" órfão.
+      const retryMessages: LLMMessage[] = [
+        ...flattenToolHistory(messages),
+        { role: "user", content: "Responda APENAS com o objeto JSON no formato do schema. Nada além do JSON. Sem texto, sem marcação, sem explicação." },
+      ];
+      const retry = await generate(retryMessages, commonConfig);
       const retryParsed = LLMAgent.tryParse(retry.text);
       if (retryParsed) return { response: retryParsed, idMap };
 
       throw new Error(`Agent returned unparseable output after retry. Raw: ${retry.text.substring(0, 200)}`);
     } catch (error) {
+      // Orçamento estourado precisa chegar na rota para virar alerta do dono;
+      // engolir aqui faria o bot responder "falha de comunicação" para sempre.
+      if (error instanceof LlmBudgetExceededError) throw error;
       console.error("[LLMAgent] Parse/validation failed:", error);
       return { response: fallbackResponse, idMap };
     }
@@ -255,61 +321,5 @@ ${session.activeOrderId ? `\nAVISO: O cliente já tem um pedido ativo sendo prep
     } catch {
       return null;
     }
-  }
-
-  private static async executeTool(
-    tenantId: string,
-    tc: LLMToolCall,
-    searchProducts: (tenantId: string, opts: { busca?: string; categoria?: string }) => Promise<SearchProduct[]>,
-    uuidToShort?: Map<string, string>
-  ): Promise<{ content: string; ids: [string, string][] }> {
-    if (tc.name !== "consultar_cardapio") {
-      return { content: "Ferramenta desconhecida.", ids: [] };
-    }
-
-    let args: { busca?: string; categoria?: string } = {};
-    try {
-      args = JSON.parse(tc.arguments || "{}");
-    } catch {
-      // malformed args → search everything
-    }
-
-    const products = await searchProducts(tenantId, args);
-    if (products.length === 0) {
-      const tokens = (args.busca || "").split(/\s+/).filter((t) => t.length >= 3);
-      if (tokens.length > 1) {
-        const broader = await searchProducts(tenantId, { busca: tokens[0] });
-        if (broader.length > 0) {
-          const lines = broader.slice(0, 5).map((p) => {
-            const sid = uuidToShort ? (uuidToShort.get(p.id) || p.id) : p.shortId;
-            return `${sid}.${p.name} R$${p.price.toFixed(2)}`;
-          });
-          return {
-            content: `Busca "${args.busca}" não retornou resultados exatos. Sugestões similares com "${tokens[0]}":\n${lines.join("\n")}`,
-            ids: broader.slice(0, 5).map((p) => {
-              const sid = uuidToShort ? (uuidToShort.get(p.id) || p.id) : p.shortId;
-              return [sid, p.id] as [string, string];
-            }),
-          };
-        }
-      }
-      return { content: "Nenhum produto encontrado para essa busca. Peça ao cliente para refinar o termo ou consultar outro item.", ids: [] };
-    }
-
-    const lines = products.map((p) => {
-      const extrasText = p.extras.length > 0
-        ? ` | Complementos: ${p.extras.map(e => `${e.name}(+R$${e.price.toFixed(2)})[id:${e.id}]`).join(", ")}`
-        : "";
-      const sid = uuidToShort ? (uuidToShort.get(p.id) || p.id) : p.shortId;
-      return `${sid}.${p.name} R$${p.price.toFixed(2)}${extrasText}`;
-    });
-
-    return {
-      content: lines.join("\n"),
-      ids: products.map(p => {
-        const sid = uuidToShort ? (uuidToShort.get(p.id) || p.id) : p.shortId;
-        return [sid, p.id] as [string, string];
-      }),
-    };
   }
 }

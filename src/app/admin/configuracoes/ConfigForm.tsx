@@ -18,6 +18,7 @@ interface Settings {
   isActive: boolean;
   evolutionInstanceName?: string | null;
   evolutionInstanceToken?: string | null;
+  monthlyBudgetCents?: number;
 }
 
 export default function ConfigForm({ initialSettings }: { initialSettings: Settings }) {
@@ -29,11 +30,13 @@ export default function ConfigForm({ initialSettings }: { initialSettings: Setti
   const [sessionTimeout, setSessionTimeout] = useState(initialSettings.sessionTimeout || 1800);
   const [contextLimit, setContextLimit] = useState(initialSettings.messageContextLimit || 15);
   const [maxOutputTokens, setMaxOutputTokens] = useState(initialSettings.maxOutputTokens || 4096);
-  const [temperature, setTemperature] = useState(initialSettings.temperature ?? 0.7);
+  const [temperature, setTemperature] = useState(initialSettings.temperature ?? 0.2);
   const [thinkingConfig, setThinkingConfig] = useState(initialSettings.thinkingConfig || "");
   const [isActive, setIsActive] = useState(initialSettings.isActive);
   const [evolutionInstanceName, setEvolutionInstanceName] = useState(initialSettings.evolutionInstanceName || "");
   const [evolutionInstanceToken, setEvolutionInstanceToken] = useState(initialSettings.evolutionInstanceToken || "");
+  // Guardado em centavos de dólar no banco; exibido em dólar no painel.
+  const [monthlyBudgetUsd, setMonthlyBudgetUsd] = useState(((initialSettings.monthlyBudgetCents ?? 0) / 100).toFixed(2));
 
   const [isSaving, setIsSaving] = useState(false);
   const [status, setStatus] = useState<{ type: "success" | "error"; message: string } | null>(null);
@@ -71,6 +74,7 @@ export default function ConfigForm({ initialSettings }: { initialSettings: Setti
           thinkingConfig,
           isActive,
           evolutionInstanceName,
+          monthlyBudgetCents: Math.round((parseFloat(monthlyBudgetUsd) || 0) * 100),
           ...(evolutionInstanceToken && evolutionInstanceToken !== "••••••••" && { evolutionInstanceToken }),
         }),
       });
@@ -301,7 +305,28 @@ export default function ConfigForm({ initialSettings }: { initialSettings: Setti
             className="w-full accent-amber-700 bg-[#FAF7F2] h-2 rounded-lg cursor-pointer border border-[#EBE2D5]"
           />
           <p className="text-xs text-[#8C7A6B] leading-relaxed">
-            Controla a criatividade das respostas. Valores baixos (0.1–0.3) geram respostas mais precisas e previsíveis. Valores altos (0.8–1.5) tornam as respostas mais criativas e variadas. Recomendado para atendimento: 0.3 a 0.7.
+            Controla a criatividade das respostas. Valores baixos (0.1–0.3) geram respostas mais precisas e previsíveis. Valores altos (0.8–1.5) tornam as respostas mais criativas e variadas. Recomendado para atendimento: 0.1 a 0.3 (o padrão é 0.2 — extração de pedido não é tarefa criativa).
+          </p>
+        </div>
+
+        <hr className="border-[#EBE2D5]/50" />
+
+        {/* Teto mensal de gasto com IA */}
+        <div className="space-y-1.5">
+          <label className="text-[11px] font-bold text-[#6B5A4B] uppercase tracking-wider block">
+            Teto mensal de gasto com IA (US$)
+          </label>
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            value={monthlyBudgetUsd}
+            onChange={(e) => setMonthlyBudgetUsd(e.target.value)}
+            className="w-full bg-[#FAF7F2] border border-[#EBE2D5] text-[#2E251B] placeholder-[#A09384] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-600"
+          />
+          <p className="text-xs text-[#8C7A6B] leading-relaxed mt-1">
+            Ao atingir o teto no mês, o bot para de chamar o provedor e gera um alerta crítico no painel.
+            Use 0 para não limitar. Modelos fora da tabela de preço não entram no cálculo.
           </p>
         </div>
 

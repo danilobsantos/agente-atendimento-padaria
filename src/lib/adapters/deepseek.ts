@@ -1,12 +1,36 @@
 import type { LLMService, LLMMessage, LLMResponse, LLMServiceConfig } from "@/lib/types/llm";
+import { toLlmError } from "@/lib/llm/errors";
+
+interface FormattedMessage {
+  role: string;
+  content: string;
+  tool_calls?: Array<{
+    id: string;
+    type: "function";
+    function: {
+      name: string;
+      arguments: string;
+    };
+  }>;
+  tool_call_id?: string;
+}
+
+interface DeepSeekToolCall {
+  id: string;
+  type?: string;
+  function: {
+    name: string;
+    arguments: string;
+  };
+}
 
 export class DeepSeekAdapter implements LLMService {
   private baseUrl = "https://api.deepseek.com";
 
   async generate(messages: LLMMessage[], config: LLMServiceConfig): Promise<LLMResponse> {
     // Map our messages to OpenAI/DeepSeek format
-    const formattedMessages = messages.map((m) => {
-      const msg: any = {
+    const formattedMessages: FormattedMessage[] = messages.map((m) => {
+      const msg: FormattedMessage = {
         role: m.role,
         content: m.content || "",
       };
@@ -29,7 +53,21 @@ export class DeepSeekAdapter implements LLMService {
       return msg;
     });
 
-    const body: any = {
+    const body: {
+      model: string;
+      messages: FormattedMessage[];
+      temperature: number;
+      max_tokens: number;
+      tools?: Array<{
+        type: "function";
+        function: {
+          name: string;
+          description: string;
+          parameters: unknown;
+        };
+      }>;
+      response_format?: { type: string };
+    } = {
       model: config.model || "deepseek-v4-flash",
       messages: formattedMessages,
       temperature: config.temperature ?? 0.7,
@@ -58,11 +96,11 @@ export class DeepSeekAdapter implements LLMService {
         Authorization: `Bearer ${config.apiKey}`,
       },
       body: JSON.stringify(body),
+      ...(config.signal ? { signal: config.signal } : {}),
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`DeepSeek API error (${response.status}): ${error}`);
+      throw toLlmError("deepseek", response.status, await response.text());
     }
 
     const data = await response.json();
@@ -71,14 +109,21 @@ export class DeepSeekAdapter implements LLMService {
     
     let tool_calls = undefined;
     if (message?.tool_calls) {
-      tool_calls = message.tool_calls.map((tc: any) => ({
+      tool_calls = (message.tool_calls as DeepSeekToolCall[]).map((tc) => ({
         id: tc.id,
         name: tc.function.name,
         arguments: tc.function.arguments,
       }));
     }
 
-    return { text, tool_calls, raw: data };
+    const usage = data.usage
+      ? {
+          inputTokens: Number(data.usage.prompt_tokens ?? 0),
+          outputTokens: Number(data.usage.completion_tokens ?? 0),
+        }
+      : undefined;
+
+    return { text, tool_calls, raw: data, ...(usage ? { usage } : {}) };
   }
 }
 

@@ -1,6 +1,5 @@
 import { BotSession, BotState } from "../types/session";
 import { SessionService } from "../services/session.service";
-import { OrdersService } from "../services/orders.service";
 
 export interface IntentRouterResponse {
   bypassed: boolean;
@@ -11,11 +10,32 @@ export class IntentRouter {
   static async route(message: string, session: BotSession): Promise<IntentRouterResponse> {
     const text = message.trim().toLowerCase();
 
-    // 1. Handle cancellations
+    // 1. Handle cancellations and new order requests
     if (text === "cancelar" || text === "cancelar pedido") {
       session.state = BotState.CANCELLED;
       await SessionService.clearSession(session.tenantId, session.customerId);
       return { bypassed: true, reply: "Seu pedido foi cancelado com sucesso. Quando quiser fazer um novo pedido, é só mandar um Oi!" };
+    }
+
+    if (/\b(novo pedido|outro pedido|fazer outro pedido|quero outro pedido|fazer um novo pedido|come[çc]ar de novo|limpar carrinho|zerar carrinho)\b/i.test(text)) {
+      session.state = BotState.START;
+      session.order.items = [];
+      session.order.total = 0;
+      session.order.deliveryFee = 0;
+      session.payment = undefined;
+      session.orderType = undefined;
+      session.activeOrderId = undefined;
+      const { prisma } = await import("@/lib/prisma");
+      await prisma.customer.update({
+        where: { id: session.customerId },
+        data: { activeOrderId: null }
+      }).catch(() => {});
+      await SessionService.saveSession(session);
+      const menuUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/+$/, "");
+      return {
+        bypassed: true,
+        reply: `Com certeza! Iniciei um novo pedido com o carrinho limpo. 😊 O que você gostaria de pedir hoje? Se preferir, veja nosso cardápio online: ${menuUrl}/cardapio`
+      };
     }
 
     // 2. State-based fixed routing
@@ -33,62 +53,25 @@ export class IntentRouter {
         }
         break;
 
-      case BotState.WAITING_NAME:
-        if (text.length > 2) {
-          session.customer.name = message.trim();
-          session.state = BotState.WAITING_ADDRESS;
-          await SessionService.saveSession(session);
-          return { bypassed: true, reply: `Muito prazer, ${session.customer.name}! Por favor, digite agora o endereço completo para entrega.` };
-        }
-        break;
-
-      case BotState.WAITING_ADDRESS:
-        if (text.length > 5) {
-          session.customer.address = message.trim();
-          session.state = BotState.WAITING_PAYMENT;
-          await SessionService.saveSession(session);
-          return { bypassed: true, reply: "Endereço anotado! Qual será a forma de pagamento? (Dinheiro, PIX ou Cartão)" };
-        }
-        break;
-
-      case BotState.WAITING_PAYMENT:
-        if (text.includes("pix") || text.includes("dinheiro") || text.includes("cartão") || text.includes("cartao")) {
-          session.payment = message.trim();
-          session.state = BotState.CONFIRM_ORDER;
-          await SessionService.saveSession(session);
-
-          const itemsText = session.order.items.map(i => `${i.quantity}x ${i.name}`).join("\n");
-          return {
-            bypassed: true,
-            reply: `Quase lá! Confirme seu pedido:\n\nItens:\n${itemsText}\n\nTotal: R$ ${session.order.total.toFixed(2)}\nEndereço: ${session.customer.address}\nPagamento: ${session.payment}\n\nResponda "confirmar" para enviar o pedido.`
-          };
-        }
-        break;
-
-      case BotState.CONFIRM_ORDER:
-        if (text.includes("confirmar") || text === "sim" || text === "ok") {
-          try {
-            const orderId = await OrdersService.finalizeOrder(session);
-            session.state = BotState.START;
-            session.activeOrderId = orderId;
-            const { formatOrderNumber } = await import("../utils/format-order");
-            return { bypassed: true, reply: `Pedido confirmado com sucesso! Já começamos a prepará-lo. (Pedido ${formatOrderNumber(orderId)})` };
-          } catch (e: any) {
-            console.error("[Intent Router] Error finalizing order:", e);
-            return { bypassed: true, reply: `Erro ao finalizar: ${e.message}` };
-          }
-        }
-        break;
-
       case BotState.FINISHED:
       case BotState.CANCELLED:
         // Restart flow
         session.state = BotState.START;
         session.order.items = [];
         session.order.total = 0;
+        session.order.deliveryFee = 0;
         session.activeOrderId = undefined;
+        session.payment = undefined;
+        session.orderType = undefined;
         await SessionService.saveSession(session);
-        return { bypassed: true, reply: "Olá novamente! Em que posso ajudar hoje?" };
+        if (text === "oi" || text === "ola" || text === "olá" || text === "bom dia" || text === "boa tarde" || text === "boa noite") {
+          const menuUrl = (process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/+$/, "");
+          return {
+            bypassed: true,
+            reply: `Olá! Bem-vindo(a) novamente! 😊 O que você gostaria de pedir hoje? Se preferir, você pode pedir pelo nosso cardápio online: ${menuUrl}/cardapio`
+          };
+        }
+        break;
     }
 
     // 3. Guard Rails (Não-Bypass, apenas mutação de estado antes do LLM)

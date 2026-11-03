@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useRef } from "react";
-import { Coffee, ShoppingBag, Plus, Minus, X, Check, ArrowRight, MapPin, User, Phone, CreditCard, Search, ChevronLeft, ChevronRight } from "lucide-react";
+import { Coffee, ShoppingBag, Plus, Minus, X, Check, ArrowRight, MapPin, User, CreditCard, Search, ChevronLeft, ChevronRight } from "lucide-react";
 
 interface Category {
   id: string;
@@ -278,6 +278,7 @@ export default function CardapioView({
       <header className="sticky top-0 bg-white/90 backdrop-blur-md border-b border-[#EBE2D5] h-16 px-6 flex justify-between items-center z-30 shadow-sm">
         <div className="flex items-center gap-2.5">
           {tenantLogoUrl ? (
+            /* eslint-disable-next-line @next/next/no-img-element */
             <img
               src={tenantLogoUrl}
               alt={tenantName}

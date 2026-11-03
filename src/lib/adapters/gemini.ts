@@ -1,4 +1,5 @@
 import type { LLMService, LLMMessage, LLMResponse, LLMServiceConfig } from "@/lib/types/llm";
+import { toLlmError } from "@/lib/llm/errors";
 
 // Gemini 3.x uses categorical thinkingLevel; 2.5 uses a numeric thinkingBudget.
 // Anything else (2.0/1.5/DeepSeek) does not accept thinkingConfig at all.
@@ -18,6 +19,19 @@ function thinkingFromConfig(model: string, thinkingConfig?: string): Record<stri
       : {};
   }
   return {};
+}
+
+interface GeminiPart {
+  text?: string;
+  functionCall?: {
+    name: string;
+    args?: Record<string, unknown>;
+  };
+  functionResponse?: {
+    name: string;
+    response: Record<string, unknown>;
+  };
+  [key: string]: unknown;
 }
 
 export class GeminiAdapter implements LLMService {
@@ -120,12 +134,12 @@ export class GeminiAdapter implements LLMService {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
+        ...(config.signal ? { signal: config.signal } : {}),
       }
     );
 
     if (!response.ok) {
-      const error = await response.text();
-      throw new Error(`Gemini API error (${response.status}): ${error}`);
+      throw toLlmError("gemini", response.status, await response.text());
     }
 
     const data = await response.json();
@@ -133,11 +147,11 @@ export class GeminiAdapter implements LLMService {
     
     // Check if response is a function call
     let tool_calls = undefined;
-    const parts = candidate?.content?.parts || [];
+    const parts = (candidate?.content?.parts || []) as GeminiPart[];
     
-    const functionCallParts = parts.filter((p: any) => p.functionCall);
+    const functionCallParts = parts.filter((p): p is GeminiPart & { functionCall: { name: string; args?: Record<string, unknown> } } => Boolean(p.functionCall));
     if (functionCallParts.length > 0) {
-      tool_calls = functionCallParts.map((p: any) => ({
+      tool_calls = functionCallParts.map((p) => ({
         id: Math.random().toString(36).substring(7), // Gemini doesn't return tool call IDs
         name: p.functionCall.name,
         arguments: JSON.stringify(p.functionCall.args || {}),
@@ -145,7 +159,7 @@ export class GeminiAdapter implements LLMService {
       }));
     }
 
-    const textPart = parts.find((p: any) => p.text);
+    const textPart = parts.find((p) => p.text);
     const text = textPart?.text ?? "";
     
     const finishReason = candidate?.finishReason;
@@ -156,7 +170,15 @@ export class GeminiAdapter implements LLMService {
       );
     }
 
-    return { text, tool_calls, raw: data };
+    const usageMetadata = data.usageMetadata;
+    const usage = usageMetadata
+      ? {
+          inputTokens: Number(usageMetadata.promptTokenCount ?? 0),
+          outputTokens: Number(usageMetadata.candidatesTokenCount ?? 0),
+        }
+      : undefined;
+
+    return { text, tool_calls, raw: data, ...(usage ? { usage } : {}) };
   }
 }
 

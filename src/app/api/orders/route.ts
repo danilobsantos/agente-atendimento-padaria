@@ -1,20 +1,19 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getPhoneLookupVariants, normalizePhone } from "@/lib/utils/company";
+import { requireUser, unauthorized } from "@/lib/utils/api-auth";
 
-// GET /api/orders — List orders for a tenant (with filters)
+// GET /api/orders — List orders for the authenticated tenant (with filters)
 export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const tenantId = searchParams.get("tenantId");
-  const status = searchParams.get("status");
+  const user = await requireUser();
+  if (!user) return unauthorized();
 
-  if (!tenantId) {
-    return NextResponse.json({ error: "tenantId is required" }, { status: 400 });
-  }
+  const { searchParams } = new URL(request.url);
+  const status = searchParams.get("status");
 
   const orders = await prisma.order.findMany({
     where: {
-      tenantId,
+      tenantId: user.tenantId,
       ...(status && { status: status as never }),
     },
     include: {
@@ -43,6 +42,20 @@ export async function POST(request: Request) {
     }
 
     let finalCustomerId = customerId;
+
+    // POST é público (checkout do cardápio), então o tenantId vem do body. Tudo
+    // que ele referencia (cliente, produto, adicional) precisa ser DESTE tenant —
+    // sem isso o checkout vira porta de leitura/escrita entre lojas.
+    if (finalCustomerId) {
+      const owned = await prisma.customer.findFirst({
+        where: { id: finalCustomerId, tenantId },
+        select: { id: true },
+      });
+      if (!owned) {
+        return NextResponse.json({ error: "Cliente inválido para esta loja" }, { status: 400 });
+      }
+    }
+
     if (!finalCustomerId && customerPhone) {
       const normalizedPhone = normalizePhone(customerPhone) || customerPhone.replace(/\D/g, "");
       const phoneVariants = getPhoneLookupVariants(normalizedPhone);
@@ -76,8 +89,11 @@ export async function POST(request: Request) {
     // Fetch product prices to calculate total
     const productIds = items.map((i: { productId: string }) => i.productId);
     const products = await prisma.product.findMany({
-      where: { id: { in: productIds } },
+      where: { id: { in: productIds }, tenantId },
     });
+    if (products.length !== new Set(productIds).size) {
+      return NextResponse.json({ error: "Produto inválido para esta loja" }, { status: 400 });
+    }
 
     const productPriceMap = new Map(products.map((p: { id: string; price: number }) => [p.id, p.price]));
 
@@ -91,7 +107,7 @@ export async function POST(request: Request) {
     ];
     const extraItems =
       extraIds.length > 0
-        ? await prisma.additionalItem.findMany({ where: { id: { in: extraIds } } })
+        ? await prisma.additionalItem.findMany({ where: { id: { in: extraIds }, tenantId } })
         : [];
     const extraMap = new Map(extraItems.map((e: { id: string; name: string; price: number }) => [e.id, e]));
 
@@ -101,13 +117,11 @@ export async function POST(request: Request) {
       notes?: string;
       additionalItems?: { id: string; name: string; price: number }[];
     }) => {
-      const additionalItems = (item.additionalItems || []).map((a) => {
+      // Adicional desconhecido é DESCARTADO. Antes ele caía no preço enviado
+      // pelo cliente — endpoint público aceitando preço do payload.
+      const additionalItems = (item.additionalItems || []).flatMap((a) => {
         const db = extraMap.get(a.id);
-        return {
-          id: a.id,
-          name: db?.name ?? a.name,
-          price: db?.price ?? a.price,
-        };
+        return db ? [{ id: db.id, name: db.name, price: db.price }] : [];
       });
       const basePrice = productPriceMap.get(item.productId) ?? 0;
       const extrasTotal = additionalItems.reduce((sum, a) => sum + a.price, 0);

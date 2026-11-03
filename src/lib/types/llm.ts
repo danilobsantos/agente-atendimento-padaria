@@ -1,9 +1,9 @@
 export interface LLMToolParameter {
   type: string;
   description?: string;
-  properties?: Record<string, any>;
+  properties?: Record<string, unknown>;
   required?: string[];
-  items?: any;
+  items?: unknown;
 }
 
 export interface LLMTool {
@@ -16,7 +16,7 @@ export interface LLMToolCall {
   id: string;
   name: string;
   arguments: string; // JSON string
-  _raw?: any; // Mantém a estrutura original do provedor (ex: thought_signature do Gemini)
+  _raw?: unknown; // Mantém a estrutura original do provedor (ex: thought_signature do Gemini)
 }
 
 export interface LLMMessage {
@@ -27,10 +27,16 @@ export interface LLMMessage {
   name?: string; // used when role is "tool"
 }
 
+export interface LLMUsage {
+  inputTokens: number;
+  outputTokens: number;
+}
+
 export interface LLMResponse {
   text: string;
   tool_calls?: LLMToolCall[];
   raw?: unknown;
+  usage?: LLMUsage;
 }
 
 export interface LLMServiceConfig {
@@ -41,6 +47,8 @@ export interface LLMServiceConfig {
   thinkingConfig?: string;
   tools?: LLMTool[];
   responseSchema?: Record<string, unknown>;
+  /** AbortSignal para timeout — os adapters repassam ao fetch. */
+  signal?: AbortSignal;
 }
 
 export interface LLMService {
