@@ -25,7 +25,12 @@ export async function POST(request: Request) {
     // Evolution Go wraps the message in data.Info (metadata) and data.Message (content).
     const data = payload.data ?? {};
     const info = data.Info ?? {};
-    const message = data.Message ?? data.message ?? {};
+    const rawMessage = data.Message ?? data.message ?? {};
+    const message =
+      rawMessage.ephemeralMessage?.message ??
+      rawMessage.viewOnceMessage?.message ??
+      rawMessage.viewOnceMessageV2?.message ??
+      rawMessage;
 
     const isFromMe = Boolean(info.IsFromMe ?? data.key?.fromMe);
     const messageId = String(data.key?.id || info.Id || info.id || "");
@@ -59,11 +64,12 @@ export async function POST(request: Request) {
       }
     }
 
-    const phone = resolveCustomerPhone(data, info);
+    const phone = resolveCustomerPhone(data, info, isFromMe);
     if (!phone) {
       console.warn("[Webhook] Skipping message: no valid phone found (likely @lid-only event):", {
         chat: info.Chat ?? data.key?.remoteJid,
         sender: info.Sender ?? data.sender,
+        isFromMe,
       });
       return NextResponse.json({ status: "skipped_no_phone" });
     }
@@ -73,10 +79,21 @@ export async function POST(request: Request) {
       return NextResponse.json({ status: "skipped_invalid_phone" });
     }
 
-    // Extract text content (supports conversation, extendedTextMessage, and button/list replies)
+    // Extract text content (supports conversation, extendedTextMessage, captions, media markers, and button/list replies)
     const text =
       message.conversation ||
       message.extendedTextMessage?.text ||
+      message.imageMessage?.caption ||
+      (message.imageMessage ? "[Foto]" : "") ||
+      message.videoMessage?.caption ||
+      (message.videoMessage ? "[Vídeo]" : "") ||
+      message.documentMessage?.caption ||
+      message.documentMessage?.fileName ||
+      (message.documentMessage ? "[Documento]" : "") ||
+      (message.audioMessage ? "[Áudio]" : "") ||
+      (message.stickerMessage ? "[Figurinha]" : "") ||
+      (message.locationMessage ? "[Localização]" : "") ||
+      (message.contactMessage || message.contactsArrayMessage ? "[Contato]" : "") ||
       message.buttonsResponseMessage?.selectedDisplayText ||
       message.buttonsResponseMessage?.selectedButtonId ||
       message.templateButtonReplyMessage?.selectedId ||
@@ -147,16 +164,21 @@ export async function POST(request: Request) {
 
     // Handle messages sent from other devices (WhatsApp mobile app, WhatsApp Web)
     if (isFromMe) {
-      // Defensive deduplication check: check if identical message was stored in the last 10 seconds
-      const recentDuplicate = await prisma.chatMessage.findFirst({
-        where: {
-          customerId: customer.id,
-          content: text,
-          createdAt: {
-            gte: new Date(Date.now() - 10000),
-          },
-        },
-      });
+      // Defensive deduplication check: check if identical message was stored in the last 10 seconds.
+      // Generic media placeholders like [Foto] or [Áudio] are not suppressed so sequential media is kept.
+      const isMediaPlaceholder = text.startsWith("[") && text.endsWith("]");
+      const recentDuplicate = isMediaPlaceholder
+        ? null
+        : await prisma.chatMessage.findFirst({
+            where: {
+              customerId: customer.id,
+              sender: "HUMAN",
+              content: text,
+              createdAt: {
+                gte: new Date(Date.now() - 10000),
+              },
+            },
+          });
 
       if (recentDuplicate) {
         return NextResponse.json({ status: "ignored_recent_duplicate" });

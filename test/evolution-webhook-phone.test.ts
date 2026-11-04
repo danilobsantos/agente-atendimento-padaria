@@ -91,4 +91,74 @@ describe("Phone Normalization and Evolution Webhook JID Resolution", () => {
       "should return null for LID-only payload, preventing ghost customer creation"
     );
   });
+
+  test("resolveCustomerPhone resolves customer (not store) when isFromMe is true (sent from mobile app)", () => {
+    // Staff sends message from WhatsApp mobile:
+    // Info.Sender is the STORE'S phone number (5511999990000).
+    // Info.Chat / key.remoteJid is the CUSTOMER'S phone number (5535988160553).
+    const payloadFromStaffMobile = {
+      data: {
+        Info: {
+          Chat: "5535988160553@s.whatsapp.net",
+          Sender: "5511999990000:0@s.whatsapp.net",
+          IsFromMe: true,
+        },
+        key: {
+          fromMe: true,
+          remoteJid: "5535988160553@s.whatsapp.net",
+          id: "3EB0ABC123456789",
+        },
+        sender: "5511999990000@s.whatsapp.net",
+      },
+    };
+
+    // 1. With explicit isFromMe boolean
+    const resolvedExplicit = resolveCustomerPhone(
+      payloadFromStaffMobile.data,
+      payloadFromStaffMobile.data.Info,
+      true
+    );
+    assert.equal(
+      resolvedExplicit,
+      "5535988160553",
+      "should resolve customer's phone from Chat/remoteJid, ignoring store's phone in Sender"
+    );
+
+    // 2. With auto-detected isFromMe from Info.IsFromMe / key.fromMe
+    const resolvedAuto = resolveCustomerPhone(
+      payloadFromStaffMobile.data,
+      payloadFromStaffMobile.data.Info
+    );
+    assert.equal(
+      resolvedAuto,
+      "5535988160553",
+      "should auto-detect isFromMe and resolve customer's phone rather than store"
+    );
+
+    // 3. Customer has LID chat, but phone in remoteJidAlt
+    const payloadFromStaffToLidCustomer = {
+      data: {
+        Info: {
+          Chat: "123119649996807026:0@lid",
+          Sender: "5511999990000:0@s.whatsapp.net",
+          IsFromMe: true,
+        },
+        key: {
+          fromMe: true,
+          remoteJid: "123119649996807026@lid",
+          remoteJidAlt: "5535988160553@s.whatsapp.net",
+        },
+        sender: "5511999990000@s.whatsapp.net",
+      },
+    };
+    const resolvedLidTarget = resolveCustomerPhone(
+      payloadFromStaffToLidCustomer.data,
+      payloadFromStaffToLidCustomer.data.Info
+    );
+    assert.equal(
+      resolvedLidTarget,
+      "5535988160553",
+      "should resolve customer's phone from remoteJidAlt when chat is LID and isFromMe is true"
+    );
+  });
 });

@@ -72,18 +72,18 @@ export function printReceipt80mm(order: PrintableOrder): void {
       const unitPrice = item.price.toFixed(2).replace(".", ",");
       return `
         <tr>
-          <td style="font-weight: bold; vertical-align: top; width: 12%; text-align: left;">${item.quantity}x</td>
-          <td style="vertical-align: top; width: 63%; text-align: left;">
-            <div>${item.product.name}</div>
+          <td style="font-weight: 800; font-size: 14px; vertical-align: top; width: 14%; text-align: left;">${item.quantity}x</td>
+          <td style="vertical-align: top; width: 61%; text-align: left;">
+            <div style="font-size: 13px; font-weight: 700;">${item.product.name}</div>
             ${item.additionalItems && item.additionalItems.length > 0
               ? item.additionalItems
-                  .map((a) => `<div style="font-size: 10px; color: #333;">+ ${a.name} (+R$ ${a.price.toFixed(2).replace(".", ",")})</div>`)
+                  .map((a) => `<div style="font-size: 11px; font-weight: 600; color: #000;">+ ${a.name} (+R$ ${a.price.toFixed(2).replace(".", ",")})</div>`)
                   .join("")
               : ""}
-            ${item.notes ? `<div style="font-size: 11px; font-style: italic; color: #333;">Obs: ${item.notes}</div>` : ""}
-            <div style="font-size: 10px; color: #555;">(R$ ${unitPrice} un)</div>
+            ${item.notes ? `<div style="font-size: 12px; font-weight: 700; font-style: italic; color: #000;">Obs: ${item.notes}</div>` : ""}
+            <div style="font-size: 11px; font-weight: 500; color: #000;">(R$ ${unitPrice} un)</div>
           </td>
-          <td style="font-weight: bold; vertical-align: top; width: 25%; text-align: right;">R$ ${itemTotal}</td>
+          <td style="font-weight: 800; font-size: 13px; vertical-align: top; width: 25%; text-align: right;">R$ ${itemTotal}</td>
         </tr>
       `;
     })
@@ -104,15 +104,16 @@ export function printReceipt80mm(order: PrintableOrder): void {
           margin: 0;
         }
         body {
-          font-family: 'Courier New', Courier, monospace, monospace;
+          font-family: Arial, Helvetica, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
           width: 72mm;
           max-width: 72mm;
           margin: 0 auto;
           padding: 8px 4px;
           color: #000;
           background: #fff;
-          font-size: 12px;
-          line-height: 1.3;
+          font-size: 13px;
+          line-height: 1.35;
+          font-weight: 500;
           -webkit-print-color-adjust: exact;
         }
         .header {
@@ -120,17 +121,19 @@ export function printReceipt80mm(order: PrintableOrder): void {
           margin-bottom: 8px;
         }
         .header h1 {
-          font-size: 16px;
-          font-weight: bold;
+          font-size: 18px;
+          font-weight: 800;
           margin: 0 0 2px 0;
           text-transform: uppercase;
+          letter-spacing: 0.5px;
         }
         .header p {
-          font-size: 11px;
+          font-size: 12px;
+          font-weight: 600;
           margin: 0;
         }
         .divider {
-          border-top: 1px dashed #000;
+          border-top: 1.5px dashed #000;
           margin: 6px 0;
         }
         .divider-double {
@@ -140,18 +143,20 @@ export function printReceipt80mm(order: PrintableOrder): void {
         .info-row {
           display: flex;
           justify-content: space-between;
-          font-size: 11px;
+          font-size: 12px;
+          font-weight: 600;
           margin-bottom: 3px;
         }
         .section-title {
-          font-size: 12px;
-          font-weight: bold;
+          font-size: 13px;
+          font-weight: 800;
           text-transform: uppercase;
-          margin: 4px 0;
+          margin: 5px 0 3px 0;
         }
         .customer-info p {
           margin: 2px 0;
-          font-size: 12px;
+          font-size: 13px;
+          font-weight: 600;
         }
         table.items-table {
           width: 100%;
@@ -167,14 +172,15 @@ export function printReceipt80mm(order: PrintableOrder): void {
         .totals .total-row {
           display: flex;
           justify-content: space-between;
-          font-size: 14px;
-          font-weight: bold;
-          margin-top: 4px;
+          font-size: 17px;
+          font-weight: 800;
+          margin-top: 6px;
         }
         .footer {
           text-align: center;
           margin-top: 10px;
           font-size: 11px;
+          font-weight: 600;
         }
       </style>
     </head>
@@ -187,7 +193,7 @@ export function printReceipt80mm(order: PrintableOrder): void {
       <div class="divider-double"></div>
 
       <div class="info-row">
-        <span><strong>PEDIDO:</strong> ${shortId}</span>
+        <span><strong>PEDIDO:</strong> <span style="font-size: 14px; font-weight: 800;">${shortId}</span></span>
         <span><strong>CANAL:</strong> ${sourceLabel}</span>
       </div>
       <div class="info-row">
@@ -206,7 +212,7 @@ export function printReceipt80mm(order: PrintableOrder): void {
 
       <div class="customer-info">
         <div class="section-title">ENDEREÇO DE ENTREGA</div>
-        <p><strong>${addressText}</strong></p>
+        <p style="font-size: 13px; font-weight: 700; line-height: 1.35;">${addressText}</p>
       </div>
 
       <div class="divider-double"></div>
@@ -223,11 +229,11 @@ export function printReceipt80mm(order: PrintableOrder): void {
       <div class="totals">
         <div class="info-row">
           <span>Forma de Pagamento:</span>
-          <span style="font-weight: bold;">${paymentMethod}</span>
+          <span style="font-weight: 800; font-size: 13px;">${paymentMethod}</span>
         </div>
         ${observations ? `
         <div class="info-row" style="margin-top: 3px; display: flex; flex-direction: column; align-items: flex-start;">
-          <span style="font-size: 11px;"><strong>Obs:</strong> ${observations}</span>
+          <span style="font-size: 12px; font-weight: 700;"><strong>Obs:</strong> ${observations}</span>
         </div>` : ""}
         ${order.deliveryAddress ? `
         <div class="info-row" style="margin-top: 4px;">

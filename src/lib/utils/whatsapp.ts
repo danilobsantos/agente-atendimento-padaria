@@ -67,6 +67,9 @@ export interface EvolutionMessageInfo {
   SenderAlt?: string | null;
   Sender?: string | null;
   Chat?: string | null;
+  ChatAlt?: string | null;
+  Recipient?: string | null;
+  IsFromMe?: boolean | null;
   [key: string]: unknown;
 }
 
@@ -75,7 +78,12 @@ export interface EvolutionWebhookData {
   sender?: string | null;
   senderPhone?: string | null;
   senderPn?: string | null;
+  recipient?: string | null;
+  recipientPhone?: string | null;
+  recipientPn?: string | null;
+  recipientAlt?: string | null;
   key?: {
+    fromMe?: boolean | null;
     remoteJidAlt?: string | null;
     participant?: string | null;
     participantPn?: string | null;
@@ -87,21 +95,47 @@ export interface EvolutionWebhookData {
 
 export function resolveCustomerPhone(
   data?: EvolutionWebhookData | null,
-  info?: EvolutionMessageInfo | null
+  info?: EvolutionMessageInfo | null,
+  optionsOrIsFromMe?: boolean | { isFromMe?: boolean }
 ): string | null {
-  const candidateJids: unknown[] = [
-    info?.SenderAlt,
-    info?.Sender,
-    data?.senderAlt,
-    data?.sender,
-    data?.key?.remoteJidAlt,
-    data?.key?.participant,
-    data?.key?.participantPn,
-    data?.senderPhone,
-    data?.senderPn,
-    info?.Chat,
-    data?.key?.remoteJid,
-  ];
+  const isFromMe =
+    typeof optionsOrIsFromMe === "boolean"
+      ? optionsOrIsFromMe
+      : Boolean(
+          optionsOrIsFromMe?.isFromMe ??
+            info?.IsFromMe ??
+            data?.key?.fromMe
+        );
+
+  // When isFromMe is true, the message was sent by our staff / phone.
+  // The sender is the store itself; the customer is the chat/recipient target.
+  const candidateJids: unknown[] = isFromMe
+    ? [
+        data?.key?.remoteJidAlt,
+        data?.recipientAlt,
+        info?.ChatAlt,
+        data?.recipientPhone,
+        data?.recipientPn,
+        data?.recipient,
+        info?.Recipient,
+        info?.Chat,
+        data?.key?.remoteJid,
+        data?.key?.participantPn,
+        data?.key?.participant,
+      ]
+    : [
+        info?.SenderAlt,
+        info?.Sender,
+        data?.senderAlt,
+        data?.sender,
+        data?.key?.remoteJidAlt,
+        data?.key?.participant,
+        data?.key?.participantPn,
+        data?.senderPhone,
+        data?.senderPn,
+        info?.Chat,
+        data?.key?.remoteJid,
+      ];
 
   // 1. Highest priority: candidate explicitly ending in @s.whatsapp.net
   for (const jid of candidateJids) {
