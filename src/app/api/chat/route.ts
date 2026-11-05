@@ -47,6 +47,7 @@ export async function GET(request: Request) {
       customerName: c.name || c.phone,
       phone: c.phone,
       isHumanAttending: c.isHumanAttending,
+      photoUrl: c.photoUrl,
       lastMessage: c.chatMessages[0],
     }))
     .sort((a, b) => {

@@ -56,7 +56,7 @@ const statusColumns = [
   { key: "DELIVERED", label: "Entregues", color: "border-t-emerald-500 bg-[#F0FDF4] border-[#DCFCE7] text-emerald-800" },
 ];
 
-export default function KanbanContainer({ tenantId }: { tenantId: string }) {
+export default function KanbanContainer({ tenantId, initialBotActive }: { tenantId: string; initialBotActive: boolean | null }) {
   const searchParams = useSearchParams();
   const highlightId = searchParams.get("highlight");
 
@@ -67,7 +67,10 @@ export default function KanbanContainer({ tenantId }: { tenantId: string }) {
   const [mobileTab, setMobileTab] = useState<string>("CONFIRMED");
   const [autoPrintEnabled, setAutoPrintEnabled] = useState<boolean>(false);
   const autoPrintRef = React.useRef(autoPrintEnabled);
-  const [botActive, setBotActive] = useState<boolean | null>(null);
+  // Estado inicial vem do servidor (DB): o primeiro paint já mostra o estado
+  // real do bot — sem "carregando" e sem atributo dependente de null na
+  // hydration (fonte do mismatch do botão).
+  const [botActive, setBotActive] = useState<boolean | null>(initialBotActive);
   const [isTogglingBot, setIsTogglingBot] = useState(false);
 
   useEffect(() => {

@@ -21,6 +21,23 @@ services:
     volumes:
       - redisdata:/data
 
+  minio:
+    # minio/minio sumiu do Docker Hub (e o quay exige licença); elestio/minio é
+    # o build da comunidade. Em produção serve qualquer imagem S3-compatible.
+    image: elestio/minio:latest
+    container_name: padaria-minio
+    restart: unless-stopped
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: padaria
+      MINIO_ROOT_PASSWORD: padaria123
+    volumes:
+      - miniodata:/data
+    command: server /data --console-address ":9001"
+
 volumes:
   pgdata:
   redisdata:
+  miniodata:

@@ -8,6 +8,8 @@ interface Message {
   id: string;
   sender: "USER" | "BOT" | "HUMAN";
   content: string;
+  mediaKey?: string | null;
+  mediaType?: string | null; // image | audio | video | document
   createdAt: string;
 }
 
@@ -16,8 +18,11 @@ interface Conversation {
   customerName: string;
   phone: string;
   isHumanAttending: boolean;
+  photoUrl?: string | null;
   lastMessage: Message;
 }
+
+const mediaUrl = (key: string) => `/api/media/${key}`;
 
 const formatTime = (dateInput: string | Date | null | undefined) => {
   if (!dateInput) return "";
@@ -132,6 +137,7 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
             typeof msg.isHumanAttending === "boolean"
               ? msg.isHumanAttending
               : existing?.isHumanAttending ?? false,
+          photoUrl: existing?.photoUrl ?? null,
           lastMessage: msg,
         };
 
@@ -144,11 +150,18 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
       });
     };
 
-    const handleCustomer = (status: { customerId: string; isHumanAttending: boolean }) => {
+    const handleCustomer = (status: { customerId: string; isHumanAttending?: boolean; photoUrl?: string | null }) => {
       setConversations((prev) =>
         prev.map((c) =>
           c.customerId === status.customerId
-            ? { ...c, isHumanAttending: status.isHumanAttending }
+            ? {
+                ...c,
+                isHumanAttending:
+                  typeof status.isHumanAttending === "boolean"
+                    ? status.isHumanAttending
+                    : c.isHumanAttending,
+                photoUrl: "photoUrl" in status ? status.photoUrl : c.photoUrl,
+              }
             : c
         )
       );
@@ -253,9 +266,23 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
                   }`}
               >
                 <div className="flex justify-between items-center w-full">
-                  <span className="font-semibold text-sm text-[#2E251B] truncate max-w-[140px]">
-                    {conv.customerName}
-                  </span>
+                  <div className="flex items-center gap-2 min-w-0">
+                    {conv.photoUrl ? (
+                      /* eslint-disable-next-line @next/next/no-img-element */
+                      <img
+                        src={conv.photoUrl}
+                        alt=""
+                        className="w-8 h-8 rounded-full object-cover border border-[#EBE2D5] shrink-0"
+                      />
+                    ) : (
+                      <div className="w-8 h-8 rounded-full bg-[#F5EFE6] border border-[#EBE2D5] flex items-center justify-center text-[#8C7A6B] shrink-0">
+                        <User className="h-4 w-4" />
+                      </div>
+                    )}
+                    <span className="font-semibold text-sm text-[#2E251B] truncate max-w-[120px]">
+                      {conv.customerName}
+                    </span>
+                  </div>
                   {conv.isHumanAttending ? (
                     <span className="flex items-center gap-1 text-[9px] bg-amber-600/10 text-amber-800 border border-amber-600/20 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0">
                       <User className="h-3 w-3" /> Humano
@@ -294,6 +321,14 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
                 >
                   ←
                 </button>
+                {activeCustomer.photoUrl ? (
+                  /* eslint-disable-next-line @next/next/no-img-element */
+                  <img
+                    src={activeCustomer.photoUrl}
+                    alt=""
+                    className="w-9 h-9 rounded-full object-cover border border-[#EBE2D5] shrink-0"
+                  />
+                ) : null}
                 <div className="min-w-0 flex-1">
                   <h3 className="font-serif font-bold text-amber-950 leading-tight text-xs sm:text-base truncate">
                     {activeCustomer.customerName}
@@ -338,18 +373,49 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
                     key={msg.id}
                     className={`flex ${isUser ? "justify-start" : "justify-end"}`}
                   >
-                    <div
-                      className={`max-w-[88%] sm:max-w-[75%] rounded-2xl px-3.5 sm:px-4.5 py-2.5 sm:py-3 text-xs sm:text-sm flex flex-col ${isUser
-                          ? "bg-white text-[#2E251B] border border-[#EBE2D5]/70 shadow-[0_2px_12px_rgba(46,37,27,0.02)]"
-                          : isBot
-                            ? "bg-emerald-500/10 text-emerald-900 border border-emerald-500/20"
-                            : "bg-amber-600/10 text-amber-900 border border-amber-600/20"
-                        }`}
-                    >
-                      <span className="text-[10px] font-bold text-[#8C7A6B] mb-1">
-                        {isUser ? "Cliente" : isBot ? "Assistente IA" : "Atendente"}
-                      </span>
-                      <p className="whitespace-pre-line leading-relaxed">{msg.content}</p>
+                  <div
+                    className={`max-w-[88%] sm:max-w-[75%] rounded-2xl px-3.5 sm:px-4.5 py-2.5 sm:py-3 text-xs sm:text-sm flex flex-col ${isUser
+                        ? "bg-white text-[#2E251B] border border-[#EBE2D5]/70 shadow-[0_2px_12px_rgba(46,37,27,0.02)]"
+                        : isBot
+                          ? "bg-emerald-500/10 text-emerald-900 border border-emerald-500/20"
+                          : "bg-amber-600/10 text-amber-900 border border-amber-600/20"
+                      }`}
+                  >
+                    <span className="text-[10px] font-bold text-[#8C7A6B] mb-1 block">
+                      {isUser ? "Cliente" : isBot ? "Assistente IA" : "Atendente"}
+                    </span>
+                      {msg.mediaKey && msg.mediaType === "image" && (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          src={mediaUrl(msg.mediaKey)}
+                          alt="Mídia recebida"
+                          className="rounded-xl mb-1.5 max-h-64 border border-black/5"
+                        />
+                      )}
+                      {msg.mediaKey && msg.mediaType === "video" && (
+                        <video
+                          controls
+                          preload="metadata"
+                          src={mediaUrl(msg.mediaKey)}
+                          className="rounded-xl mb-1.5 max-h-64"
+                        />
+                      )}
+                      {msg.mediaKey && msg.mediaType === "audio" && (
+                        <audio controls preload="metadata" src={mediaUrl(msg.mediaKey)} className="h-10 mb-1.5" />
+                      )}
+                      {msg.mediaKey && msg.mediaType === "document" && (
+                        <a
+                          href={mediaUrl(msg.mediaKey)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="inline-flex items-center gap-1 font-semibold underline mb-1.5"
+                        >
+                          Abrir documento
+                        </a>
+                      )}
+                      {!(msg.mediaKey && msg.content.startsWith("[") && msg.content.endsWith("]")) && (
+                        <p className="whitespace-pre-line leading-relaxed">{msg.content}</p>
+                      )}
                       <span className="text-[9px] text-[#8C7A6B] mt-1.5 self-end font-light">
                         {formatTime(msg.createdAt)}
                       </span>
