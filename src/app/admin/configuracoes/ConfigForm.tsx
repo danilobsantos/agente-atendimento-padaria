@@ -355,9 +355,9 @@ export default function ConfigForm({ initialSettings }: { initialSettings: Setti
         {/* System Toggle Status */}
         <div className="flex items-center justify-between bg-[#FAF7F2] border border-[#EBE2D5] p-4 rounded-xl shadow-inner">
           <div>
-            <h3 className="text-sm font-bold text-amber-950">Robô Ativo</h3>
+            <h3 className="text-sm font-bold text-amber-950">Robô Ativo (Chave Geral)</h3>
             <p className="text-xs text-[#6B5A4B] mt-0.5 font-light">
-              Habilita ou desabilita as respostas automáticas da IA no WhatsApp globalmente.
+              Chave mestra: liga ou desliga todas as respostas automáticas da IA imediatamente.
             </p>
           </div>
           <button

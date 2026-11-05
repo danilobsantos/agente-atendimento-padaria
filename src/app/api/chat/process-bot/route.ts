@@ -14,12 +14,14 @@ import { isAuthorizedBotRequest, unauthorized } from "@/lib/utils/api-auth";
 import { raiseAlert } from "@/lib/services/alert.service";
 import { detectHumanRequest, detectOptOut, isExplicitConfirmation } from "@/lib/bot/guardrails/detect";
 import { checkPrices, stripDeliveryPromises } from "@/lib/bot/guardrails/price-guard";
+import { checkBotOperatingSchedule } from "@/lib/utils/bot-schedule";
 import type { LLMService } from "@/lib/types/llm";
 
 export interface BotRouteDeps {
   llmService?: LLMService;
   send?: typeof sendChunkedResponse;
   debounceMs?: number;
+  now?: Date;
   // Next.js typed-routes passes `context: { params }` here; only used for type-compat.
   params?: unknown;
 }
@@ -185,6 +187,21 @@ export async function POST(request: Request, deps: BotRouteDeps = {}) {
       (silencedUntil !== null && silencedUntil > new Date())
     ) {
       return NextResponse.json({ status: "skipped", reason: "bot_inactive_or_human_handover" });
+    }
+
+    if (botSetting.scheduleEnabled) {
+      const scheduleStatus = checkBotOperatingSchedule(botSetting, deps.now ?? new Date());
+      if (!scheduleStatus.inOperatingHours) {
+        return NextResponse.json({
+          status: "skipped",
+          reason: "outside_operating_hours",
+          details: {
+            currentTime: scheduleStatus.currentTime,
+            currentDay: scheduleStatus.currentDay,
+            scheduleReason: scheduleStatus.reason,
+          },
+        });
+      }
     }
 
     if (!botSetting.llmApiKey) {

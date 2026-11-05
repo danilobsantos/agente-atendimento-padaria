@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getAuthUser } from "@/lib/utils/auth-route";
 import CompanyForm from "./CompanyForm";
+import ScheduleCard from "./ScheduleCard";
 import EvolutionCard from "./EvolutionCard";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +17,10 @@ export default async function EmpresaPage() {
     );
   }
 
-  const tenant = await prisma.tenant.findUnique({ where: { id: user.tenantId } });
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: user.tenantId },
+    include: { botSetting: true },
+  });
 
   if (!tenant) {
     return (
@@ -33,7 +37,7 @@ export default async function EmpresaPage() {
           Configurações da Empresa
         </h1>
         <p className="text-sm text-[#6B5A4B] mt-2 font-light">
-          Dados cadastrais da empresa, logo e conexão do dispositivo WhatsApp (Evolution Go).
+          Dados cadastrais da empresa, logo, horários de atendimento automático e conexão do dispositivo WhatsApp (Evolution Go).
         </p>
       </div>
 
@@ -48,6 +52,8 @@ export default async function EmpresaPage() {
           deliveryFee: tenant.deliveryFee,
         }}
       />
+
+      <ScheduleCard initialBotSetting={tenant.botSetting} />
 
       <EvolutionCard />
     </div>

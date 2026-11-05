@@ -2,7 +2,13 @@ import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@/generated/prisma/client";
 import { requireUser, unauthorized } from "@/lib/utils/api-auth";
+import {
+  getBotScheduleStatus,
+  normalizeWeeklySchedule,
+  DEFAULT_WEEKLY_SCHEDULE,
+} from "@/lib/utils/bot-schedule";
 
 // GET /api/bot-settings — configurações do bot do tenant autenticado
 export async function GET() {
@@ -17,9 +23,12 @@ export async function GET() {
     return NextResponse.json({ error: "Bot settings not found" }, { status: 404 });
   }
 
+  const scheduleStatus = getBotScheduleStatus(settings);
+
   // Never expose the full API key or token to the frontend
   return NextResponse.json({
     ...settings,
+    scheduleStatus,
     llmApiKey: settings.llmApiKey ? "••••" + settings.llmApiKey.slice(-4) : "",
     evolutionInstanceToken: settings.evolutionInstanceToken ? "••••••••" : "",
   });
@@ -47,6 +56,9 @@ export async function PUT(request: Request) {
       evolutionInstanceName,
       evolutionInstanceToken,
       monthlyBudgetCents,
+      scheduleEnabled,
+      weeklySchedule,
+      timezone,
     } = body;
 
     const settings = await prisma.botSetting.upsert({
@@ -66,6 +78,11 @@ export async function PUT(request: Request) {
         ...(evolutionInstanceName !== undefined && { evolutionInstanceName: evolutionInstanceName?.trim() || null }),
         ...(evolutionInstanceToken !== undefined && evolutionInstanceToken !== "" && { evolutionInstanceToken: evolutionInstanceToken.trim() }),
         ...(monthlyBudgetCents !== undefined && { monthlyBudgetCents: parseInt(monthlyBudgetCents) }),
+        ...(scheduleEnabled !== undefined && { scheduleEnabled: Boolean(scheduleEnabled) }),
+        ...(weeklySchedule !== undefined && {
+          weeklySchedule: normalizeWeeklySchedule(weeklySchedule) as unknown as Prisma.InputJsonValue,
+        }),
+        ...(timezone !== undefined && { timezone: String(timezone).trim() || "America/Sao_Paulo" }),
       },
       create: {
         tenantId: user.tenantId,
@@ -83,11 +100,19 @@ export async function PUT(request: Request) {
         evolutionInstanceName: evolutionInstanceName?.trim() || null,
         evolutionInstanceToken: evolutionInstanceToken?.trim() || null,
         monthlyBudgetCents: monthlyBudgetCents !== undefined ? parseInt(monthlyBudgetCents) : 0,
+        scheduleEnabled: scheduleEnabled !== undefined ? Boolean(scheduleEnabled) : false,
+        weeklySchedule: (weeklySchedule
+          ? normalizeWeeklySchedule(weeklySchedule)
+          : DEFAULT_WEEKLY_SCHEDULE) as unknown as Prisma.InputJsonValue,
+        timezone: timezone ? String(timezone).trim() : "America/Sao_Paulo",
       },
     });
 
+    const scheduleStatus = getBotScheduleStatus(settings);
+
     return NextResponse.json({
       ...settings,
+      scheduleStatus,
       llmApiKey: settings.llmApiKey ? "••••" + settings.llmApiKey.slice(-4) : "",
       evolutionInstanceToken: settings.evolutionInstanceToken ? "••••••••" : "",
     });

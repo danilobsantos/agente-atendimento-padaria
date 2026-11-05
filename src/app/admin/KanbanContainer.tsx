@@ -7,6 +7,7 @@ import { Coffee, MessageSquare, Globe, ArrowRight, CheckCircle2, User, MapPin, T
 import { printReceipt80mm } from "@/lib/utils/print-receipt";
 import { formatOrderNumber, parseOrderNotes } from "@/lib/utils/format-order";
 import { useSound } from "./sound-context";
+import type { BotScheduleStatusSummary } from "@/lib/utils/bot-schedule";
 
 interface Product {
   name: string;
@@ -56,7 +57,15 @@ const statusColumns = [
   { key: "DELIVERED", label: "Entregues", color: "border-t-emerald-500 bg-[#F0FDF4] border-[#DCFCE7] text-emerald-800" },
 ];
 
-export default function KanbanContainer({ tenantId, initialBotActive }: { tenantId: string; initialBotActive: boolean | null }) {
+export default function KanbanContainer({
+  tenantId,
+  initialBotActive,
+  initialScheduleStatus,
+}: {
+  tenantId: string;
+  initialBotActive: boolean | null;
+  initialScheduleStatus?: BotScheduleStatusSummary | null;
+}) {
   const searchParams = useSearchParams();
   const highlightId = searchParams.get("highlight");
 
@@ -71,6 +80,9 @@ export default function KanbanContainer({ tenantId, initialBotActive }: { tenant
   // real do bot — sem "carregando" e sem atributo dependente de null na
   // hydration (fonte do mismatch do botão).
   const [botActive, setBotActive] = useState<boolean | null>(initialBotActive);
+  const [scheduleStatus, setScheduleStatus] = useState<BotScheduleStatusSummary | null>(
+    initialScheduleStatus ?? null
+  );
   const [isTogglingBot, setIsTogglingBot] = useState(false);
 
   useEffect(() => {
@@ -101,6 +113,9 @@ export default function KanbanContainer({ tenantId, initialBotActive }: { tenant
       if (res.ok) {
         const data = await res.json();
         setBotActive(Boolean(data.isActive));
+        if (data.scheduleStatus) {
+          setScheduleStatus(data.scheduleStatus);
+        }
       }
     } catch (err) {
       console.error("Error fetching bot settings:", err);
@@ -132,6 +147,11 @@ export default function KanbanContainer({ tenantId, initialBotActive }: { tenant
       });
       if (!res.ok) {
         setBotActive(!nextState);
+      } else {
+        const data = await res.json();
+        if (data.scheduleStatus) {
+          setScheduleStatus(data.scheduleStatus);
+        }
       }
     } catch {
       setBotActive(!nextState);
@@ -325,28 +345,44 @@ export default function KanbanContainer({ tenantId, initialBotActive }: { tenant
             onClick={toggleBot}
             disabled={botActive === null || isTogglingBot}
             title={
-              botActive
-                ? "Robô de atendimento IA está ATIVO. Clique para pausar."
-                : "Robô de atendimento IA está PAUSADO. Clique para ativar."
+              botActive === false
+                ? "Robô de atendimento IA está PAUSADO manualmente. Clique para ativar."
+                : scheduleStatus?.scheduleEnabled
+                  ? scheduleStatus.inOperatingHours
+                    ? `Robô ATIVO e dentro do horário (${scheduleStatus.statusDetail}). Clique para pausar.`
+                    : `Robô está FORA DO HORÁRIO (${scheduleStatus.statusDetail}). Clique para pausar manualmente.`
+                  : "Robô de atendimento IA está ATIVO (24h). Clique para pausar."
             }
             className={`flex items-center gap-1.5 text-xs border px-3 py-1.5 sm:py-2 rounded-full shadow-xs transition-all cursor-pointer shrink-0 disabled:opacity-60 ${
               botActive === null
                 ? "border-[#EBE2D5] bg-white text-[#8C7A6B]"
-                : botActive
-                  ? "border-emerald-400 bg-emerald-500/5 text-emerald-950 font-semibold hover:bg-emerald-500/10"
-                  : "border-red-300 bg-red-500/5 text-red-950 font-semibold hover:bg-red-500/10"
+                : !botActive
+                  ? "border-red-300 bg-red-500/5 text-red-950 font-semibold hover:bg-red-500/10"
+                  : scheduleStatus?.scheduleEnabled && !scheduleStatus.inOperatingHours
+                    ? "border-amber-400 bg-amber-500/10 text-amber-950 font-semibold hover:bg-amber-500/20"
+                    : "border-emerald-400 bg-emerald-500/5 text-emerald-950 font-semibold hover:bg-emerald-500/10"
             }`}
           >
             <Bot
               className={`h-3.5 w-3.5 ${
                 botActive === null
                   ? "text-[#8C7A6B] animate-pulse"
-                  : botActive
-                    ? "text-emerald-600"
-                    : "text-red-600"
+                  : !botActive
+                    ? "text-red-600"
+                    : scheduleStatus?.scheduleEnabled && !scheduleStatus.inOperatingHours
+                      ? "text-amber-600"
+                      : "text-emerald-600"
               }`}
             />
-            <span>Robô</span>
+            <span>
+              {botActive === null
+                ? "Robô"
+                : !botActive
+                  ? "Robô Pausado"
+                  : scheduleStatus?.scheduleEnabled && !scheduleStatus.inOperatingHours
+                    ? "Robô (Fora do Horário)"
+                    : "Robô Ativo"}
+            </span>
           </button>
         </div>
       </div>

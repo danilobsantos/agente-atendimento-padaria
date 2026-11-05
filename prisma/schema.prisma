@@ -62,6 +62,11 @@ model BotSetting {
   // Teto mensal de gasto de API em centavos. 0 = sem limite.
   monthlyBudgetCents  Int         @default(0) @map("monthly_budget_cents")
 
+  // ─── Programação de Horário ─────────────────────────────────
+  scheduleEnabled     Boolean     @default(false) @map("schedule_enabled")
+  weeklySchedule      Json?       @map("weekly_schedule")
+  timezone            String      @default("America/Sao_Paulo") @map("timezone")
+
   evolutionInstanceName  String? @map("evolution_instance_name")
   evolutionInstanceToken String? @map("evolution_instance_token")
 
