@@ -49,6 +49,7 @@ export default function CardapioManager({ tenantId }: { tenantId: string }) {
   const [formPrice, setFormPrice] = useState("");
   const [formDescription, setFormDescription] = useState("");
   const [formImageUrl, setFormImageUrl] = useState("");
+  const [uploadingImage, setUploadingImage] = useState(false);
   const [formCategoryId, setFormCategoryId] = useState("");
   const [formIsAvailable, setFormIsAvailable] = useState(true);
 
@@ -110,6 +111,27 @@ export default function CardapioManager({ tenantId }: { tenantId: string }) {
     setFormCategoryId(product.categoryId);
     setFormIsAvailable(product.isAvailable);
     setIsModalOpen(true);
+  };
+
+  // Upload da foto: sobe no MinIO e guarda a URL; o produto só é atualizado no submit.
+  const handleImageUpload = async (file: File) => {
+    setUploadingImage(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch("/api/products/image", { method: "POST", body: form });
+      if (res.ok) {
+        const data = await res.json();
+        setFormImageUrl(data.url);
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setError(data.error || "Falha no upload da imagem");
+      }
+    } catch {
+      setError("Falha no upload da imagem");
+    } finally {
+      setUploadingImage(false);
+    }
   };
 
   // Toggle availability (fast switch)
@@ -477,15 +499,43 @@ export default function CardapioManager({ tenantId }: { tenantId: string }) {
               {/* Image URL */}
               <div className="space-y-1.5">
                 <label className="text-[11px] font-bold text-[#6B5A4B] uppercase tracking-wider block">
-                  Link da Imagem (URL)
+                  Foto do produto
                 </label>
-                <input
-                  type="url"
-                  value={formImageUrl}
-                  onChange={(e) => setFormImageUrl(e.target.value)}
-                  placeholder="https://images.unsplash.com/..."
-                  className="w-full bg-[#FAF7F2] border border-[#EBE2D5] text-[#2E251B] placeholder-[#A09384] rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-amber-600"
-                />
+                <div className="flex items-center gap-3">
+                  {formImageUrl ? (
+                    /* eslint-disable-next-line @next/next/no-img-element */
+                    <img
+                      src={formImageUrl}
+                      alt="Prévia"
+                      className="w-14 h-14 rounded-xl object-cover border border-[#EBE2D5]"
+                    />
+                  ) : (
+                    <div className="w-14 h-14 rounded-xl bg-[#FAF7F2] border border-[#EBE2D5] flex items-center justify-center text-amber-800">
+                      <Coffee className="h-5 w-5" />
+                    </div>
+                  )}
+                  <input
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) void handleImageUpload(file);
+                      e.target.value = "";
+                    }}
+                    className="flex-1 w-full bg-[#FAF7F2] border border-[#EBE2D5] text-[#2E251B] file:mr-3 file:px-3 file:py-2 file:rounded-lg file:border-0 file:bg-amber-400 file:text-white file:font-semibold file:cursor-pointer rounded-xl px-4 py-3 text-sm focus:outline-none focus:border-amber-600"
+                    disabled={uploadingImage}
+                  />
+                  {formImageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setFormImageUrl("")}
+                      className="text-xs font-semibold text-red-600 hover:text-red-700"
+                    >
+                      remover
+                    </button>
+                  )}
+                </div>
+                {uploadingImage && <p className="text-xs text-[#8C7A6B]">Enviando imagem…</p>}
               </div>
 
               {/* Toggle availability switch */}

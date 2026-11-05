@@ -80,6 +80,8 @@ model Customer {
 
   phone            String
   name             String?
+  // Foto de perfil do WhatsApp, baixada da Evolution para o MinIO no primeiro contato.
+  photoUrl         String?   @map("photo_url")
   isHumanAttending Boolean   @default(false) @map("is_human_attending")
   // Janela de silêncio do bot: substitui o silêncio permanente que o webhook
   // aplicava quando alguém respondia pelo celular (B5).
@@ -109,7 +111,12 @@ model ChatMessage {
 
   sender    MessageSender
   content   String        @db.Text
-  createdAt DateTime      @default(now()) @map("created_at")
+  // Chave do objeto no MinIO (ex.: media/{tenantId}/{uuid}.ogg) e o tipo dele.
+  // Nulos = mensagem de texto puro. Com mídia, o `content` guarda a projeção
+  // text (caption, transcrição) que o bot e a lista leem sem saber de bytes.
+  mediaKey  String?   @map("media_key")
+  mediaType String?   @map("media_type") // image | audio | video | document
+  createdAt DateTime  @default(now()) @map("created_at")
 
   @@index([customerId, createdAt])
   @@map("chat_messages")

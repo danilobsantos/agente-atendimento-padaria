@@ -218,6 +218,59 @@ export class EvolutionGoService {
 
     return { created: !existing, token };
   }
+
+  // POST /message/downloadmedia — corpo: { message: <waE2E.Message cru do
+  // webhook> }. Resposta gin.H sem contrato no swagger; o campo base64 é
+  // procurado nas variantes conhecidas e 404/erro vira null (placeholder).
+  async downloadMedia(rawMessage: unknown): Promise<{ buffer: Buffer; mimetype: string } | null> {
+    try {
+      const body = await this.jsonFetch<Record<string, unknown>>(`${this.baseUrl}/message/downloadmedia`, {
+        method: "POST",
+        signal: AbortSignal.timeout(30_000),
+        body: JSON.stringify({ message: rawMessage }),
+      });
+
+      let b64: string | null =
+        typeof body.base64 === "string"
+          ? body.base64
+          : typeof body.data === "string"
+            ? body.data
+            : null;
+      if (!b64) return null;
+      // resposta pode vir como data: URI ou base64 cru
+      b64 = b64.replace(/^data:[^;]*;base64,/, "");
+
+      const mimetype =
+        typeof body.mimetype === "string"
+          ? body.mimetype
+          : typeof body.mimeType === "string"
+            ? body.mimeType
+            : "application/octet-stream";
+      const b64u = Buffer.from(b64, "base64");
+      if (!b64u.length) return null;
+      return { buffer: b64u, mimetype };
+    } catch (err) {
+      console.error("[EvolutionGo] downloadMedia falhou:", err);
+      return null;
+    }
+  }
+
+  // POST /user/avatar ({ number, preview:false }) — o endpoint observado pode
+  // trabalhar >45s; timeout curto e null (avatar é cosmético, falha tolerada).
+  async getAvatarUrl(number: string): Promise<string | null> {
+    try {
+      const body = await this.jsonFetch<Record<string, unknown>>(`${this.baseUrl}/user/avatar`, {
+        method: "POST",
+        signal: AbortSignal.timeout(20_000),
+        body: JSON.stringify({ number, preview: false }),
+      });
+      const withUrl = body as { url?: string; link?: string; data?: { url?: string } ; result?: { url?: string } };
+      return withUrl.url ?? withUrl.link ?? withUrl.data?.url ?? withUrl.result?.url ?? null;
+    } catch (err) {
+      console.error("[EvolutionGo] getAvatarUrl falhou:", err);
+      return null;
+    }
+  }
 }
 
 export const evolutionGo = new EvolutionGoService();

@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getPhoneLookupVariants } from "@/lib/utils/company";
 import { resolveCustomerPhone } from "@/lib/utils/whatsapp";
 import { botSecret } from "@/lib/utils/api-auth";
+import { ingestInboundMedia, refreshCustomerAvatar } from "@/lib/services/media.service";
 
 // Janela em que o bot fica quieto depois que um humano responde pelo celular.
 // Antes disso o silêncio era permanente e o bot nunca voltava a atender.
@@ -162,6 +163,14 @@ export async function POST(request: Request) {
       });
     }
 
+    // Mídia anexada: baixa no Evolution, sobe para o MinIO e projeta o texto
+    // (transcrição substitui [Áudio]; caption substitui [Foto]/[Vídeo]).
+    const attachedMedia = Boolean(
+      message.imageMessage || message.audioMessage || message.videoMessage || message.documentMessage || message.stickerMessage
+    );
+    const ingested = attachedMedia ? await ingestInboundMedia(tenant.id, message) : null;
+    const content = ingested?.text || text;
+
     // Handle messages sent from other devices (WhatsApp mobile app, WhatsApp Web)
     if (isFromMe) {
       // Defensive deduplication check: check if identical message was stored in the last 10 seconds.
@@ -189,7 +198,9 @@ export async function POST(request: Request) {
         data: {
           customerId: customer.id,
           sender: "HUMAN",
-          content: text,
+          content,
+          mediaKey: ingested?.mediaKey || null,
+          mediaType: ingested?.mediaType || null,
         },
       });
 
@@ -233,9 +244,17 @@ export async function POST(request: Request) {
       data: {
         customerId: customer.id,
         sender: "USER",
-        content: text,
+        content,
+        mediaKey: ingested?.mediaKey || null,
+        mediaType: ingested?.mediaType || null,
       },
     });
+
+    // Foto de contato: só no primeiro inbound (fire-and-forget; o endpoint de
+    // avatar da Evolution pode travar >45s).
+    if (!customer.photoUrl) {
+      void refreshCustomerAvatar(tenant.id, customer.id, phone);
+    }
 
     // Publish event to Redis for WebSocket broadcast
     const { redisChannel, redisPub } = await import("@/lib/redis");
@@ -254,7 +273,7 @@ export async function POST(request: Request) {
     fetch(`${appUrl}/api/chat/process-bot`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "x-bot-secret": botSecret() },
-      body: JSON.stringify({ customerId: customer.id, message: text }),
+      body: JSON.stringify({ customerId: customer.id, message: content }),
     }).catch((err) => console.error("Error triggering bot pipeline:", err));
 
     return NextResponse.json({ status: "received", customerId: customer.id });
