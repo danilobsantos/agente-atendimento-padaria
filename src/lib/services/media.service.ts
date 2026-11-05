@@ -88,15 +88,18 @@ export async function ingestInboundMedia(tenantId: string, rawMessage: unknown):
 }
 
 /**
- * Foto do contato: baixa o avatar da Evolution no primeiro contato e grava em
- * `Customer.photoUrl`. Negativa em cache por photoUrl null: só o primeiro
- * inbound tenta (o endpoint observado pode travar >45s — rodar backfill manual
- * depois: `UPDATE customers SET photo_url = NULL WHERE photo_url IS NULL`).
+ * Foto do contato: baixa o avatar da Evolution e grava em `Customer.photoUrl`.
+ * Tentativas sem sucesso são limitadas a uma por dia por cliente.
  */
 export async function refreshCustomerAvatar(tenantId: string, customerId: string, phone: string): Promise<void> {
   try {
     const customer = await prisma.customer.findUnique({ where: { id: customerId }, select: { photoUrl: true } });
     if (!customer || customer.photoUrl) return;
+
+    // Não repita a chamada lenta a cada mensagem quando a Evolution não tem avatar.
+    const { redisKey, redisPub } = await import("@/lib/redis");
+    const acquired = await redisPub.set(redisKey("avatar_attempt", tenantId, customerId), "1", "EX", 86400, "NX");
+    if (acquired !== "OK") return;
 
     const service = await getEvolutionServiceForTenant(tenantId);
     const url = await service.getAvatarUrl(phone);
@@ -112,7 +115,7 @@ export async function refreshCustomerAvatar(tenantId: string, customerId: string
     await prisma.customer.update({ where: { id: customerId }, data: { photoUrl: `/api/media/${key}` } });
 
     // Painel atualiza o avatar em tempo real junto com o evento de customer.
-    const { redisChannel, redisPub } = await import("@/lib/redis");
+    const { redisChannel } = await import("@/lib/redis");
     await redisPub.publish(
       redisChannel("tenant", tenantId, "customer"),
       JSON.stringify({ customerId, photoUrl: `/api/media/${key}` })

@@ -267,7 +267,10 @@ export class EvolutionGoService {
       const withUrl = body as { url?: string; link?: string; data?: { url?: string } ; result?: { url?: string } };
       return withUrl.url ?? withUrl.link ?? withUrl.data?.url ?? withUrl.result?.url ?? null;
     } catch (err) {
-      console.error("[EvolutionGo] getAvatarUrl falhou:", err);
+      // Avatar é cosmético; timeout do endpoint lento é uma falha esperada.
+      if (!(err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError"))) {
+        console.error("[EvolutionGo] getAvatarUrl falhou:", err);
+      }
       return null;
     }
   }
