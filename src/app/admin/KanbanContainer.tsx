@@ -363,42 +363,40 @@ export default function KanbanContainer({
             disabled={botActive === null || isTogglingBot}
             title={
               botActive === false
-                ? "Robô de atendimento IA está PAUSADO manualmente. Clique para ativar."
+                ? "Atendimento IA está PAUSADO manualmente. Clique para ativar."
                 : scheduleStatus?.scheduleEnabled
                   ? scheduleStatus.inOperatingHours
-                    ? `Robô ATIVO e dentro do horário (${scheduleStatus.statusDetail}). Clique para pausar.`
-                    : `Robô está FORA DO HORÁRIO (${scheduleStatus.statusDetail}). Clique para pausar manualmente.`
-                  : "Robô de atendimento IA está ATIVO (24h). Clique para pausar."
+                    ? `IA ATIVA e dentro do horário (${scheduleStatus.statusDetail}). Clique para pausar.`
+                    : `IA está FORA DO HORÁRIO (${scheduleStatus.statusDetail}). Clique para pausar manualmente.`
+                  : "Atendimento IA está ATIVO (24h). Clique para pausar."
             }
-            className={`flex items-center gap-1.5 text-xs border px-3 py-1.5 sm:py-2 rounded-full shadow-xs transition-all cursor-pointer shrink-0 disabled:opacity-60 ${
-              botActive === null
-                ? "border-[#EBE2D5] bg-white text-[#8C7A6B]"
-                : !botActive
-                  ? "border-red-300 bg-red-500/5 text-red-950 font-semibold hover:bg-red-500/10"
-                  : scheduleStatus?.scheduleEnabled && !scheduleStatus.inOperatingHours
-                    ? "border-amber-400 bg-amber-500/10 text-amber-950 font-semibold hover:bg-amber-500/20"
-                    : "border-emerald-400 bg-emerald-500/5 text-emerald-950 font-semibold hover:bg-emerald-500/10"
-            }`}
+            className={`flex items-center gap-1.5 text-xs border px-3 py-1.5 sm:py-2 rounded-full shadow-xs transition-all cursor-pointer shrink-0 disabled:opacity-60 ${botActive === null
+              ? "border-[#EBE2D5] bg-white text-[#8C7A6B]"
+              : !botActive
+                ? "border-red-300 bg-red-500/5 text-red-950 font-semibold hover:bg-red-500/10"
+                : scheduleStatus?.scheduleEnabled && !scheduleStatus.inOperatingHours
+                  ? "border-amber-400 bg-amber-500/10 text-amber-950 font-semibold hover:bg-amber-500/20"
+                  : "border-emerald-400 bg-emerald-500/5 text-emerald-950 font-semibold hover:bg-emerald-500/10"
+              }`}
           >
             <Bot
-              className={`h-3.5 w-3.5 ${
-                botActive === null
-                  ? "text-[#8C7A6B] animate-pulse"
-                  : !botActive
-                    ? "text-red-600"
-                    : scheduleStatus?.scheduleEnabled && !scheduleStatus.inOperatingHours
-                      ? "text-amber-600"
-                      : "text-emerald-600"
-              }`}
+              className={`h-3.5 w-3.5 ${botActive === null
+                ? "text-[#8C7A6B] animate-pulse"
+                : !botActive
+                  ? "text-red-600"
+                  : scheduleStatus?.scheduleEnabled && !scheduleStatus.inOperatingHours
+                    ? "text-amber-600"
+                    : "text-emerald-600"
+                }`}
             />
             <span>
               {botActive === null
-                ? "Robô"
+                ? "IA"
                 : !botActive
-                  ? "Robô Pausado"
+                  ? "IA Pausada"
                   : scheduleStatus?.scheduleEnabled && !scheduleStatus.inOperatingHours
-                    ? "Robô (Fora do Horário)"
-                    : "Robô Ativo"}
+                    ? "IA (Fora do Horário)"
+                    : "IA Ativa"}
             </span>
           </button>
         </div>

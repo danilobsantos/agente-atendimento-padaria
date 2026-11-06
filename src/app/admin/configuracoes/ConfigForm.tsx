@@ -97,8 +97,8 @@ export default function ConfigForm({ initialSettings }: { initialSettings: Setti
       {status && (
         <div
           className={`p-4 rounded-xl border flex items-start gap-3 text-sm ${status.type === "success"
-              ? "bg-emerald-500/10 text-emerald-800 border-emerald-500/20"
-              : "bg-rose-500/10 text-rose-800 border-rose-500/20"
+            ? "bg-emerald-500/10 text-emerald-800 border-emerald-500/20"
+            : "bg-rose-500/10 text-rose-800 border-rose-500/20"
             }`}
         >
           {status.type === "success" ? (
@@ -203,7 +203,7 @@ export default function ConfigForm({ initialSettings }: { initialSettings: Setti
             className="w-full accent-amber-700 bg-[#FAF7F2] h-2 rounded-lg cursor-pointer border border-[#EBE2D5]"
           />
           <p className="text-xs text-[#8C7A6B] leading-relaxed">
-            Tempo que o robô aguarda novas mensagens do mesmo cliente antes de processar e responder.
+            Tempo que a IA aguarda novas mensagens do mesmo cliente antes de processar e responder.
             Evita o envio de respostas sucessivas e fragmentadas no WhatsApp.
           </p>
         </div>
@@ -227,7 +227,7 @@ export default function ConfigForm({ initialSettings }: { initialSettings: Setti
             className="w-full accent-amber-700 bg-[#FAF7F2] h-2 rounded-lg cursor-pointer border border-[#EBE2D5]"
           />
           <p className="text-xs text-[#8C7A6B] leading-relaxed">
-            Número de mensagens anteriores da conversa enviadas para o cérebro da IA para dar contexto à resposta atual. Valores maiores dão mais memória ao robô, mas utilizam mais tokens.
+            Número de mensagens anteriores da conversa enviadas para o cérebro da IA para dar contexto à resposta atual. Valores maiores dão mais memória a IA, mas utilizam mais tokens.
           </p>
         </div>
 
@@ -355,7 +355,7 @@ export default function ConfigForm({ initialSettings }: { initialSettings: Setti
         {/* System Toggle Status */}
         <div className="flex items-center justify-between bg-[#FAF7F2] border border-[#EBE2D5] p-4 rounded-xl shadow-inner">
           <div>
-            <h3 className="text-sm font-bold text-amber-950">Robô Ativo (Chave Geral)</h3>
+            <h3 className="text-sm font-bold text-amber-950">IA Ativa (Chave Geral)</h3>
             <p className="text-xs text-[#6B5A4B] mt-0.5 font-light">
               Chave mestra: liga ou desliga todas as respostas automáticas da IA imediatamente.
             </p>

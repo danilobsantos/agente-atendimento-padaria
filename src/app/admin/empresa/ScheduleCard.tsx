@@ -103,11 +103,10 @@ export default function ScheduleCard({ initialBotSetting }: ScheduleCardProps) {
     <form onSubmit={handleSave} className="space-y-4 max-w-4xl">
       {status && (
         <div
-          className={`p-4 rounded-xl border flex items-start gap-3 text-sm ${
-            status.type === "success"
-              ? "bg-emerald-500/10 text-emerald-800 border-emerald-500/20"
-              : "bg-rose-500/10 text-rose-800 border-rose-500/20"
-          }`}
+          className={`p-4 rounded-xl border flex items-start gap-3 text-sm ${status.type === "success"
+            ? "bg-emerald-500/10 text-emerald-800 border-emerald-500/20"
+            : "bg-rose-500/10 text-rose-800 border-rose-500/20"
+            }`}
         >
           {status.type === "success" ? (
             <CheckCircle2 className="h-5 w-5 shrink-0 text-emerald-700" />
@@ -129,7 +128,7 @@ export default function ScheduleCard({ initialBotSetting }: ScheduleCardProps) {
                 Programação de Horários de Atendimento
               </h2>
               <p className="text-xs text-[#6B5A4B] font-light">
-                Configure os dias da semana e intervalos em que o robô deve responder. Fora do horário, ele permanece em silêncio.
+                Configure os dias da semana e intervalos em que a IA deve responder. Fora do horário, ela permanece em silêncio.
               </p>
             </div>
           </div>
@@ -137,15 +136,13 @@ export default function ScheduleCard({ initialBotSetting }: ScheduleCardProps) {
           <button
             type="button"
             onClick={() => setScheduleEnabled(!scheduleEnabled)}
-            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${
-              scheduleEnabled ? "bg-amber-600" : "bg-[#EBE2D5]"
-            }`}
+            className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none ${scheduleEnabled ? "bg-amber-600" : "bg-[#EBE2D5]"
+              }`}
             title={scheduleEnabled ? "Desativar programação de horário" : "Ativar programação de horário"}
           >
             <span
-              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${
-                scheduleEnabled ? "translate-x-5" : "translate-x-0"
-              }`}
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition duration-200 ease-in-out ${scheduleEnabled ? "translate-x-5" : "translate-x-0"
+                }`}
             />
           </button>
         </div>
@@ -154,11 +151,10 @@ export default function ScheduleCard({ initialBotSetting }: ScheduleCardProps) {
           <div className="space-y-5">
             {/* Live Status Preview */}
             <div
-              className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 text-xs ${
-                schedulePreview.inOperatingHours
-                  ? "bg-emerald-500/10 text-emerald-900 border-emerald-500/20"
-                  : "bg-amber-500/10 text-amber-900 border-amber-500/20"
-              }`}
+              className={`p-3.5 rounded-xl border flex items-center justify-between gap-3 text-xs ${schedulePreview.inOperatingHours
+                ? "bg-emerald-500/10 text-emerald-900 border-emerald-500/20"
+                : "bg-amber-500/10 text-amber-900 border-amber-500/20"
+                }`}
             >
               <div className="flex items-center gap-2">
                 {schedulePreview.inOperatingHours ? (
@@ -212,13 +208,12 @@ export default function ScheduleCard({ initialBotSetting }: ScheduleCardProps) {
                 return (
                   <div
                     key={dayIndex}
-                    className={`rounded-xl border p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${
-                      dayConfig.enabled
-                        ? isToday
-                          ? "bg-amber-50/40 border-amber-300/80 shadow-xs"
-                          : "bg-[#FAF7F2]/60 border-[#EBE2D5]"
-                        : "bg-stone-50/80 border-[#EBE2D5]/60 opacity-70"
-                    }`}
+                    className={`rounded-xl border p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${dayConfig.enabled
+                      ? isToday
+                        ? "bg-amber-50/40 border-amber-300/80 shadow-xs"
+                        : "bg-[#FAF7F2]/60 border-[#EBE2D5]"
+                      : "bg-stone-50/80 border-[#EBE2D5]/60 opacity-70"
+                      }`}
                   >
                     {/* Day name & toggle */}
                     <div className="flex items-center gap-3 min-w-[180px]">
@@ -231,9 +226,8 @@ export default function ScheduleCard({ initialBotSetting }: ScheduleCardProps) {
                       />
                       <label
                         htmlFor={`schedule-day-${dayIndex}`}
-                        className={`text-sm font-semibold cursor-pointer select-none flex items-center gap-2 ${
-                          dayConfig.enabled ? "text-[#2E251B]" : "text-[#8C7A6B]"
-                        }`}
+                        className={`text-sm font-semibold cursor-pointer select-none flex items-center gap-2 ${dayConfig.enabled ? "text-[#2E251B]" : "text-[#8C7A6B]"
+                          }`}
                       >
                         {DAY_NAMES_PT[dayIndex]}
                         {isToday && (
@@ -273,12 +267,12 @@ export default function ScheduleCard({ initialBotSetting }: ScheduleCardProps) {
             </div>
 
             <p className="text-xs text-[#8C7A6B] leading-relaxed pt-1">
-              💡 <strong>Como funciona fora do horário:</strong> O robô não enviará mensagens e não gerará pedidos automáticos. As mensagens enviadas pelos clientes continuarão sendo salvas no histórico e exibidas no painel de atendimento humano em tempo real.
+              💡 <strong>Como funciona fora do horário:</strong> A IA não enviará mensagens e não gerará pedidos automáticos. As mensagens enviadas pelos clientes continuarão sendo salvas no histórico e exibidas no painel de atendimento humano em tempo real.
             </p>
           </div>
         ) : (
           <div className="bg-[#FAF7F2] border border-[#EBE2D5] rounded-xl p-4 text-xs text-[#6B5A4B] leading-relaxed">
-            A programação de horário está <strong>desativada</strong>. O robô responderá 24 horas por dia, 7 dias por semana, enquanto a chave geral estiver ativa. Ative o botão no canto superior para programar horários de início e fim por dia da semana.
+            A programação de horário está <strong>desativada</strong>. A IA responderá 24 horas por dia, 7 dias por semana, enquanto a chave geral estiver ativa. Ative o botão no canto superior para programar horários de início e fim por dia da semana.
           </div>
         )}
 

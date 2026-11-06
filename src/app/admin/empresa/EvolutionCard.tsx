@@ -145,7 +145,7 @@ export default function EvolutionCard() {
 
       <div className="text-sm text-[#6B5A4B] space-y-3">
         <p className="font-light">
-          Conecte o número de WhatsApp que o robô usa para atender os clientes.
+          Conecte o número de WhatsApp que a IA usará para atender os clientes.
         </p>
 
         <ol className="space-y-1.5 text-xs text-[#8C7A6B]">

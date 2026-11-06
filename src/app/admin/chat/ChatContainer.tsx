@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSocket } from "@/hooks/use-socket";
-import { Send, User, Bot, Volume2, UserCheck, FileText, Phone, ExternalLink, Image as ImageIcon } from "lucide-react";
+import { Send, User, Bot, Volume2, UserCheck, FileText, Phone, ExternalLink, Image as ImageIcon, Loader2 } from "lucide-react";
 
 interface Message {
   id: string;
@@ -19,6 +19,7 @@ interface Conversation {
   phone: string;
   isHumanAttending: boolean;
   photoUrl?: string | null;
+  unreadCount?: number;
   lastMessage: Message;
 }
 
@@ -51,22 +52,95 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
   const [inputText, setInputText] = useState("");
   const [isSending, setIsSending] = useState(false);
 
+  // Pagination & Filters
+  const [activeFilter, setActiveFilter] = useState<"all" | "unread" | "ia">("all");
+  const activeFilterRef = useRef<"all" | "unread" | "ia">(activeFilter);
+  useEffect(() => {
+    activeFilterRef.current = activeFilter;
+  }, [activeFilter]);
+
+  const [page, setPage] = useState<number>(1);
+  const [hasMore, setHasMore] = useState<boolean>(true);
+  const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
+  const [totalCount, setTotalCount] = useState<number>(0);
+  const [totalUnread, setTotalUnread] = useState<number>(0);
+
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { socket } = useSocket(tenantId);
 
-  // Fetch recent conversations list
-  const fetchConversations = useCallback(async () => {
-    try {
-      const res = await fetch(`/api/chat?tenantId=${tenantId}`);
-      if (res.ok) {
-        const data: Conversation[] = await res.json();
-        setConversations(data);
-        setActiveCustomerId((prev) => prev || (data.length > 0 ? data[0].customerId : null));
+  // Fetch recent conversations list with pagination & filters
+  const fetchConversations = useCallback(
+    async (targetPage = 1, filterOverride?: "all" | "unread" | "ia", append = false) => {
+      const currentFilter = filterOverride || activeFilterRef.current;
+      if (append) {
+        setIsLoadingMore(true);
       }
-    } catch (err) {
-      console.error("Error fetching conversations:", err);
+      try {
+        const res = await fetch(`/api/chat?page=${targetPage}&limit=30&filter=${currentFilter}`);
+        if (res.ok) {
+          const data = await res.json();
+          const list: Conversation[] = Array.isArray(data) ? data : data.conversations || [];
+          const more = Boolean(data.hasMore);
+          const count = typeof data.totalCount === "number" ? data.totalCount : list.length;
+          const unread = typeof data.totalUnread === "number" ? data.totalUnread : 0;
+
+          setConversations((prev) => (append ? [...prev, ...list] : list));
+          setHasMore(more);
+          setPage(targetPage);
+          setTotalCount(count);
+          setTotalUnread(unread);
+
+          if (!append) {
+            setActiveCustomerId((prev) => {
+              if (prev && list.some((c) => c.customerId === prev)) return prev;
+              return list.length > 0 ? list[0].customerId : null;
+            });
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching conversations:", err);
+      } finally {
+        setIsLoadingMore(false);
+      }
+    },
+    []
+  );
+
+  const handleFilterChange = (newFilter: "all" | "unread" | "ia") => {
+    if (newFilter === activeFilter) return;
+    setActiveFilter(newFilter);
+    setConversations([]);
+    setPage(1);
+    setHasMore(true);
+    fetchConversations(1, newFilter, false);
+  };
+
+  const handleSidebarScroll = (e: React.UIEvent<HTMLDivElement>) => {
+    const target = e.currentTarget;
+    if (isLoadingMore || !hasMore) return;
+    const scrollBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
+    if (scrollBottom < 80) {
+      fetchConversations(page + 1, activeFilterRef.current, true);
     }
-  }, [tenantId]);
+  };
+
+  const handleSelectCustomer = (customerId: string) => {
+    setActiveCustomerId(customerId);
+
+    // Zera contador de não lidas localmente de imediato
+    setConversations((prev) =>
+      prev.map((c) => (c.customerId === customerId ? { ...c, unreadCount: 0 } : c))
+    );
+
+    // Notifica endpoint de leitura
+    void fetch("/api/chat/read", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ customerId }),
+    }).catch((err) => {
+      console.warn("Failed to mark conversation as read:", err);
+    });
+  };
 
   // Fetch messages for active customer
   const fetchMessages = useCallback(async (customerId: string) => {
@@ -81,10 +155,10 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
     }
   }, []);
 
-  // Initialize
+  // Initialize on mount only
   useEffect(() => {
     const timer = setTimeout(() => {
-      fetchConversations();
+      fetchConversations(1, "all", false);
     }, 0);
     return () => clearTimeout(timer);
   }, [fetchConversations]);
@@ -126,16 +200,32 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
       if (!msg || !msg.customerId) return;
       console.log("💬 [LiveChat WebSocket] Message received:", msg);
 
-      if (activeCustomerIdRef.current === msg.customerId) {
+      const isCurrentActive = activeCustomerIdRef.current === msg.customerId;
+
+      if (isCurrentActive) {
         setMessages((prev) => {
           if (prev.some((m) => m && m.id === msg.id)) return prev;
           return [...prev, msg];
         });
+        if (msg.sender === "USER") {
+          void fetch("/api/chat/read", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ customerId: msg.customerId }),
+          }).catch(() => {});
+        }
       }
 
       setConversations((prev) => {
         const index = prev.findIndex((c) => c.customerId === msg.customerId);
         const existing = index !== -1 ? prev[index] : null;
+
+        let nextUnread = 0;
+        if (msg.sender === "USER") {
+          nextUnread = isCurrentActive ? 0 : (existing?.unreadCount || 0) + 1;
+        } else {
+          nextUnread = 0;
+        }
 
         const updatedConv: Conversation = {
           customerId: msg.customerId,
@@ -147,6 +237,7 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
               ? msg.isHumanAttending
               : existing?.isHumanAttending ?? false,
           photoUrl: existing?.photoUrl ?? null,
+          unreadCount: nextUnread,
           lastMessage: msg,
         };
 
@@ -164,13 +255,13 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
         prev.map((c) =>
           c.customerId === status.customerId
             ? {
-                ...c,
-                isHumanAttending:
-                  typeof status.isHumanAttending === "boolean"
-                    ? status.isHumanAttending
-                    : c.isHumanAttending,
-                photoUrl: "photoUrl" in status ? status.photoUrl : c.photoUrl,
-              }
+              ...c,
+              isHumanAttending:
+                typeof status.isHumanAttending === "boolean"
+                  ? status.isHumanAttending
+                  : c.isHumanAttending,
+              photoUrl: "photoUrl" in status ? status.photoUrl : c.photoUrl,
+            }
             : c
         )
       );
@@ -248,6 +339,12 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
 
   const activeCustomer = conversations.find((c) => c.customerId === activeCustomerId);
 
+  const displayedConversations = conversations.filter((conv) => {
+    if (activeFilter === "unread") return (conv.unreadCount || 0) > 0;
+    if (activeFilter === "ia") return !conv.isHumanAttending;
+    return true;
+  });
+
   return (
     <div className="flex-1 flex overflow-hidden bg-[#FAF7F2]">
       {/* 1. Conversations Sidebar (Left Pane) */}
@@ -255,61 +352,131 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
         className={`w-full md:w-80 border-r border-[#EBE2D5] bg-white flex-col shrink-0 shadow-[4px_0_24px_rgba(46,37,27,0.01)] ${activeCustomerId ? "hidden md:flex" : "flex"
           }`}
       >
-        <div className="p-4 border-b border-[#EBE2D5] bg-white flex justify-between items-center">
-          <h2 className="font-serif font-bold text-lg text-amber-950">Conversas</h2>
-          <span className="text-xs bg-[#FAF7F2] border border-[#EBE2D5] px-2.5 py-0.5 rounded-full font-bold text-amber-800">
-            {conversations.length}
-          </span>
+        <div className="p-3 sm:p-4 border-b border-[#EBE2D5] bg-white space-y-3 shrink-0">
+          <div className="flex justify-between items-center">
+            <h2 className="font-serif font-bold text-lg text-amber-950">Conversas</h2>
+            <span className="text-xs bg-[#FAF7F2] border border-[#EBE2D5] px-2.5 py-0.5 rounded-full font-bold text-amber-800">
+              {activeFilter === "all" ? totalCount : displayedConversations.length}
+            </span>
+          </div>
+
+          {/* Filter Pills (WhatsApp Style) */}
+          <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+            <button
+              onClick={() => handleFilterChange("all")}
+              className={`px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer shrink-0 ${activeFilter === "all"
+                ? "bg-amber-900 text-white shadow-xs"
+                : "bg-[#FAF7F2] border border-[#EBE2D5] text-[#6B5A4B] hover:bg-[#F5EFE6]"
+                }`}
+            >
+              Todas
+            </button>
+            <button
+              onClick={() => handleFilterChange("unread")}
+              className={`px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer shrink-0 flex items-center gap-1.5 ${activeFilter === "unread"
+                ? "bg-amber-900 text-white shadow-xs"
+                : "bg-[#FAF7F2] border border-[#EBE2D5] text-[#6B5A4B] hover:bg-[#F5EFE6]"
+                }`}
+            >
+              <span>Não lidas</span>
+              {totalUnread > 0 && (
+                <span
+                  className={`text-[10px] font-bold px-1.5 py-0.2 rounded-full ${activeFilter === "unread" ? "bg-white text-amber-950" : "bg-emerald-600 text-white"
+                    }`}
+                >
+                  {totalUnread}
+                </span>
+              )}
+            </button>
+            <button
+              onClick={() => handleFilterChange("ia")}
+              className={`px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer shrink-0 flex items-center gap-1 ${activeFilter === "ia"
+                ? "bg-amber-900 text-white shadow-xs"
+                : "bg-[#FAF7F2] border border-[#EBE2D5] text-[#6B5A4B] hover:bg-[#F5EFE6]"
+                }`}
+            >
+              <Bot className="h-3 w-3" />
+              <span>IA</span>
+            </button>
+          </div>
         </div>
-        <div className="flex-1 overflow-y-auto divide-y divide-[#FAF7F2]">
-          {conversations.length === 0 ? (
+
+        <div
+          onScroll={handleSidebarScroll}
+          className="flex-1 overflow-y-auto divide-y divide-[#FAF7F2]"
+        >
+          {displayedConversations.length === 0 ? (
             <div className="p-6 text-center text-xs text-[#8C7A6B]">
-              Nenhuma conversa ativa no WhatsApp.
+              {activeFilter === "unread"
+                ? "Nenhuma conversa não lida."
+                : activeFilter === "ia"
+                  ? "Nenhum cliente sendo atendido pela IA."
+                  : "Nenhuma conversa ativa no WhatsApp."}
             </div>
           ) : (
-            conversations.map((conv) => (
-              <button
-                key={conv.customerId}
-                onClick={() => setActiveCustomerId(conv.customerId)}
-                className={`w-full text-left p-4 hover:bg-[#FAF7F2] transition-colors flex flex-col gap-1 cursor-pointer ${activeCustomerId === conv.customerId ? "bg-[#F5EFE6]" : ""
-                  }`}
-              >
-                <div className="flex justify-between items-center w-full">
-                  <div className="flex items-center gap-2 min-w-0">
-                    {conv.photoUrl ? (
-                      /* eslint-disable-next-line @next/next/no-img-element */
-                      <img
-                        src={conv.photoUrl}
-                        alt=""
-                        className="w-8 h-8 rounded-full object-cover border border-[#EBE2D5] shrink-0"
-                      />
+            displayedConversations.map((conv) => {
+              const unread = conv.unreadCount || 0;
+              const isSelected = activeCustomerId === conv.customerId;
+              return (
+                <button
+                  key={conv.customerId}
+                  onClick={() => handleSelectCustomer(conv.customerId)}
+                  className={`w-full text-left p-3 sm:p-3.5 hover:bg-[#FAF7F2] transition-colors flex flex-col gap-1 cursor-pointer ${isSelected ? "bg-[#F5EFE6]" : ""
+                    }`}
+                >
+                  <div className="flex justify-between items-center w-full">
+                    <div className="flex items-center gap-2 min-w-0">
+                      {conv.photoUrl ? (
+                        /* eslint-disable-next-line @next/next/no-img-element */
+                        <img
+                          src={conv.photoUrl}
+                          alt=""
+                          className="w-8 h-8 rounded-full object-cover border border-[#EBE2D5] shrink-0"
+                        />
+                      ) : (
+                        <div className="w-8 h-8 rounded-full bg-[#F5EFE6] border border-[#EBE2D5] flex items-center justify-center text-[#8C7A6B] shrink-0">
+                          <User className="h-4 w-4" />
+                        </div>
+                      )}
+                      <span className={`text-sm truncate max-w-[130px] ${unread > 0 ? "font-bold text-[#2E251B]" : "font-semibold text-[#2E251B]"}`}>
+                        {conv.customerName}
+                      </span>
+                    </div>
+                    {conv.isHumanAttending ? (
+                      <span className="flex items-center gap-1 text-[9px] bg-amber-600/10 text-amber-800 border border-amber-600/20 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0">
+                        <User className="h-3 w-3" /> Humano
+                      </span>
                     ) : (
-                      <div className="w-8 h-8 rounded-full bg-[#F5EFE6] border border-[#EBE2D5] flex items-center justify-center text-[#8C7A6B] shrink-0">
-                        <User className="h-4 w-4" />
-                      </div>
+                      <span className="flex items-center gap-1 text-[9px] bg-emerald-500/10 text-emerald-800 border border-emerald-500/20 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0">
+                        <Bot className="h-3 w-3" /> IA
+                      </span>
                     )}
-                    <span className="font-semibold text-sm text-[#2E251B] truncate max-w-[120px]">
-                      {conv.customerName}
-                    </span>
                   </div>
-                  {conv.isHumanAttending ? (
-                    <span className="flex items-center gap-1 text-[9px] bg-amber-600/10 text-amber-800 border border-amber-600/20 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0">
-                      <User className="h-3 w-3" /> Humano
+                  <div className="flex justify-between items-center w-full gap-2 mt-0.5">
+                    <span className={`text-xs truncate flex-1 ${unread > 0 ? "font-medium text-[#2E251B]" : "text-[#6B5A4B] font-light"}`}>
+                      {conv.lastMessage?.content}
                     </span>
-                  ) : (
-                    <span className="flex items-center gap-1 text-[9px] bg-emerald-500/10 text-emerald-800 border border-emerald-500/20 px-2.5 py-0.5 rounded-full font-bold uppercase tracking-wider shrink-0">
-                      <Bot className="h-3 w-3" /> Robô
-                    </span>
-                  )}
-                </div>
-                <span className="text-xs text-[#6B5A4B] truncate w-full">
-                  {conv.lastMessage?.content}
-                </span>
-                <span className="text-[9px] text-[#8C7A6B] align-self-end mt-1 font-light">
-                  {formatTime(conv.lastMessage?.createdAt)}
-                </span>
-              </button>
-            ))
+                    <div className="flex items-center gap-1.5 shrink-0">
+                      <span className={`text-[10px] font-light ${unread > 0 ? "text-emerald-700 font-semibold" : "text-[#8C7A6B]"}`}>
+                        {formatTime(conv.lastMessage?.createdAt)}
+                      </span>
+                      {unread > 0 && (
+                        <span className="bg-emerald-600 text-white text-[10px] font-bold h-4.5 min-w-[18px] px-1 rounded-full flex items-center justify-center shadow-xs">
+                          {unread}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              );
+            })
+          )}
+
+          {isLoadingMore && (
+            <div className="py-3 flex justify-center items-center text-xs text-[#8C7A6B] gap-2">
+              <Loader2 className="h-4 w-4 animate-spin text-amber-700" />
+              <span>Carregando mais...</span>
+            </div>
           )}
         </div>
       </div>
@@ -352,15 +519,15 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
                   toggleHandover(activeCustomer.customerId, activeCustomer.isHumanAttending)
                 }
                 className={`flex items-center gap-1.5 text-[11px] sm:text-xs font-bold px-2.5 sm:px-4 py-2 rounded-xl border transition-all cursor-pointer shrink-0 ${activeCustomer.isHumanAttending
-                    ? "bg-amber-600/10 text-amber-800 border-amber-600/20 hover:bg-amber-600/20"
-                    : "bg-[#FAF7F2] hover:bg-[#F5EFE6] text-[#2E251B] border-[#EBE2D5]"
+                  ? "bg-amber-600/10 text-amber-800 border-amber-600/20 hover:bg-amber-600/20"
+                  : "bg-[#FAF7F2] hover:bg-[#F5EFE6] text-[#2E251B] border-[#EBE2D5]"
                   }`}
               >
                 {activeCustomer.isHumanAttending ? (
                   <>
                     <Bot className="h-4 w-4 text-amber-700 shrink-0" />
-                    <span className="hidden sm:inline">Devolver para Robô</span>
-                    <span className="sm:hidden">Robô</span>
+                    <span className="hidden sm:inline">Devolver para IA</span>
+                    <span className="sm:hidden">IA</span>
                   </>
                 ) : (
                   <>
@@ -382,17 +549,17 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
                     key={msg.id}
                     className={`flex ${isUser ? "justify-start" : "justify-end"}`}
                   >
-                  <div
-                    className={`max-w-[88%] sm:max-w-[75%] rounded-2xl px-3.5 sm:px-4.5 py-2.5 sm:py-3 text-xs sm:text-sm flex flex-col ${isUser
+                    <div
+                      className={`max-w-[88%] sm:max-w-[75%] rounded-2xl px-3.5 sm:px-4.5 py-2.5 sm:py-3 text-xs sm:text-sm flex flex-col ${isUser
                         ? "bg-white text-[#2E251B] border border-[#EBE2D5]/70 shadow-[0_2px_12px_rgba(46,37,27,0.02)]"
                         : isBot
                           ? "bg-emerald-500/10 text-emerald-900 border border-emerald-500/20"
                           : "bg-amber-600/10 text-amber-900 border border-amber-600/20"
-                      }`}
-                  >
-                    <span className="text-[10px] font-bold text-[#8C7A6B] mb-1 block">
-                      {isUser ? "Cliente" : isBot ? "Assistente IA" : "Atendente"}
-                    </span>
+                        }`}
+                    >
+                      <span className="text-[10px] font-bold text-[#8C7A6B] mb-1 block">
+                        {isUser ? "Cliente" : isBot ? "Assistente IA" : "Atendente"}
+                      </span>
                       {msg.mediaKey && msg.mediaType === "image" && (
                         <a
                           href={mediaUrl(msg.mediaKey)}
@@ -477,8 +644,8 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
                           msg.content.endsWith("]") &&
                           ["[Foto]", "[Vídeo]", "[Áudio]", "[Documento]", "[Figurinha]"].includes(msg.content))
                       ) && (
-                        <p className="whitespace-pre-line leading-relaxed">{msg.content}</p>
-                      )}
+                          <p className="whitespace-pre-line leading-relaxed">{msg.content}</p>
+                        )}
                       <span className="text-[9px] text-[#8C7A6B] mt-1.5 self-end font-light">
                         {formatTime(msg.createdAt)}
                       </span>
@@ -553,7 +720,7 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
               ) : (
                 <div className="flex items-center gap-2 text-xs font-bold text-emerald-900">
                   <Bot className="h-4 w-4 text-emerald-600" />
-                  <span>Robô de IA Ativo</span>
+                  <span>IA Ativa</span>
                 </div>
               )}
               <p className="text-[11px] text-[#6B5A4B] leading-relaxed">

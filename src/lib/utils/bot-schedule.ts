@@ -35,12 +35,12 @@ export const DAY_NAMES_SHORT_PT = [
 
 export const DEFAULT_WEEKLY_SCHEDULE: WeeklySchedule = [
   { day: 0, enabled: false, start: "08:00", end: "12:00" }, // Domingo
-  { day: 1, enabled: true,  start: "08:00", end: "19:30" }, // Segunda
-  { day: 2, enabled: true,  start: "08:00", end: "19:30" }, // Terça
-  { day: 3, enabled: true,  start: "08:00", end: "19:30" }, // Quarta
-  { day: 4, enabled: true,  start: "08:00", end: "19:30" }, // Quinta
-  { day: 5, enabled: true,  start: "08:00", end: "19:30" }, // Sexta
-  { day: 6, enabled: true,  start: "08:00", end: "14:00" }, // Sábado
+  { day: 1, enabled: true, start: "08:00", end: "19:30" }, // Segunda
+  { day: 2, enabled: true, start: "08:00", end: "19:30" }, // Terça
+  { day: 3, enabled: true, start: "08:00", end: "19:30" }, // Quarta
+  { day: 4, enabled: true, start: "08:00", end: "19:30" }, // Quinta
+  { day: 5, enabled: true, start: "08:00", end: "19:30" }, // Sexta
+  { day: 6, enabled: true, start: "08:00", end: "14:00" }, // Sábado
 ];
 
 const WEEKDAY_MAP: Record<string, number> = {
@@ -130,11 +130,11 @@ export function getZonedTimeInfo(
 export interface BotScheduleEvaluation {
   inOperatingHours: boolean;
   reason:
-    | "bot_inactive"
-    | "schedule_disabled"
-    | "within_schedule"
-    | "day_disabled"
-    | "outside_hours";
+  | "bot_inactive"
+  | "schedule_disabled"
+  | "within_schedule"
+  | "day_disabled"
+  | "outside_hours";
   currentTime: string;
   currentDay: number;
   currentDayName: string;
@@ -263,7 +263,7 @@ export function getBotScheduleStatus(
       scheduleEnabled,
       inOperatingHours: false,
       statusLabel: "Pausado",
-      statusDetail: "Robô desligado manualmente na chave geral",
+      statusDetail: "IA desligada manualmente na chave geral",
       currentLocalTime: evalResult.currentTime,
       currentDay: evalResult.currentDay,
       todaySchedule: evalResult.todayConfig,

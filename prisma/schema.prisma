@@ -92,6 +92,7 @@ model Customer {
   // aplicava quando alguém respondia pelo celular (B5).
   botSilencedUntil DateTime? @map("bot_silenced_until")
   activeOrderId    String?   @map("active_order_id")
+  lastReadAt       DateTime? @map("last_read_at")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -100,6 +101,7 @@ model Customer {
   chatMessages ChatMessage[]
 
   @@unique([tenantId, phone])
+  @@index([tenantId, lastReadAt])
   @@map("customers")
 }
 
