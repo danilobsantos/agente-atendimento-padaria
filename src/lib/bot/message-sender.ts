@@ -61,13 +61,14 @@ function delay(ms: number): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, ms));
 }
 
-interface SendChunkedParams {
+export interface SendChunkedParams {
   phone: string;
   customerId: string;
   tenantId: string;
   customerName: string;
   isHumanAttending: boolean;
   text: string;
+  sender?: "BOT" | "HUMAN";
 }
 
 /**
@@ -96,7 +97,7 @@ export async function sendChunkedResponse(params: SendChunkedParams): Promise<vo
     const botMessage = await prisma.chatMessage.create({
       data: {
         customerId,
-        sender: "BOT",
+        sender: params.sender ?? "BOT",
         content: chunk,
       },
     });

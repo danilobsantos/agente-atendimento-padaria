@@ -151,6 +151,33 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       });
     }
 
+    // Notify customer about order cancellation if message provided, and clear bot session
+    if (body.status === "CANCELLED") {
+      const cancellationText = typeof body.cancellationMessage === "string" ? body.cancellationMessage.trim() : "";
+      if (cancellationText) {
+        try {
+          await sendChunkedResponse({
+            phone: order.customer.phone,
+            customerId: order.customerId,
+            tenantId: order.tenantId,
+            customerName: order.customer.name ?? "",
+            isHumanAttending: order.customer.isHumanAttending,
+            text: cancellationText,
+            sender: "HUMAN",
+          });
+        } catch (e) {
+          console.error("Failed to notify customer about order cancellation:", e);
+        }
+      }
+
+      try {
+        const { SessionService } = await import("@/lib/services/session.service");
+        await SessionService.clearSession(order.tenantId, order.customerId);
+      } catch (e) {
+        console.error("Failed to clear session on cancellation:", e);
+      }
+    }
+
     return NextResponse.json(order);
   } catch (err: unknown) {
     console.error("Error in PATCH /api/orders/[id]:", err);

@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { useSocket } from "@/hooks/use-socket";
 import { useSearchParams } from "next/navigation";
-import { Coffee, MessageSquare, Globe, ArrowRight, CheckCircle2, User, MapPin, Trash2, AlertTriangle, Printer, Bell, BellOff, Bot } from "lucide-react";
+import { Coffee, MessageSquare, Globe, ArrowRight, CheckCircle2, User, MapPin, Trash2, AlertTriangle, Printer, Bell, BellOff, Bot, Loader2 } from "lucide-react";
 import { printReceipt80mm } from "@/lib/utils/print-receipt";
 import { formatOrderNumber, parseOrderNotes } from "@/lib/utils/format-order";
 import { useSound } from "./sound-context";
@@ -71,6 +71,10 @@ export default function KanbanContainer({
 
   const [orders, setOrders] = useState<Order[]>([]);
   const [orderToDelete, setOrderToDelete] = useState<string | null>(null);
+  const [cancelMessage, setCancelMessage] = useState<string>("");
+  const [notifyWhatsApp, setNotifyWhatsApp] = useState<boolean>(true);
+  const [isCancelling, setIsCancelling] = useState<boolean>(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
   const [selectedOrderDetails, setSelectedOrderDetails] = useState<Order | null>(null);
   const [activeHighlightId, setActiveHighlightId] = useState<string | null>(null);
   const [mobileTab, setMobileTab] = useState<string>("CONFIRMED");
@@ -244,21 +248,34 @@ export default function KanbanContainer({
   }, [socket, fetchOrders]);
 
   const handleCancelOrder = async () => {
-    if (!orderToDelete) return;
+    if (!orderToDelete || isCancelling) return;
+    setIsCancelling(true);
+    setCancelError(null);
+
     try {
+      const messageToSend = notifyWhatsApp && cancelMessage.trim() ? cancelMessage.trim() : undefined;
       const res = await fetch(`/api/orders/${orderToDelete}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: "CANCELLED" }),
+        body: JSON.stringify({
+          status: "CANCELLED",
+          ...(messageToSend && { cancellationMessage: messageToSend }),
+        }),
       });
 
       if (res.ok) {
         setOrders((prev) => prev.filter((o) => o.id !== orderToDelete));
+        setOrderToDelete(null);
+        setCancelMessage("");
+      } else {
+        const data = await res.json().catch(() => ({}));
+        setCancelError(data.error || "Erro ao cancelar o pedido. Tente novamente.");
       }
     } catch (err) {
       console.error("Error cancelling order:", err);
+      setCancelError("Erro de conexão ao cancelar o pedido.");
     } finally {
-      setOrderToDelete(null);
+      setIsCancelling(false);
     }
   };
 
@@ -535,7 +552,16 @@ export default function KanbanContainer({
 
                           {col.key !== "DELIVERED" && col.key !== "DISPATCHED" && (
                             <button
-                              onClick={() => setOrderToDelete(order.id)}
+                              onClick={() => {
+                                setOrderToDelete(order.id);
+                                const firstName = order.customer.name?.trim().split(" ")[0] || "";
+                                const greeting = firstName ? `Olá, ${firstName}!` : "Olá!";
+                                setCancelMessage(
+                                  `${greeting} Infelizmente seu pedido ${formatOrderNumber(order.id)} precisou ser cancelado.`
+                                );
+                                setNotifyWhatsApp(true);
+                                setCancelError(null);
+                              }}
                               className="bg-white hover:bg-rose-50 text-rose-600 border border-[#EBE2D5] hover:border-rose-200 px-3 py-2 rounded-lg transition-all cursor-pointer"
                               title="Cancelar pedido"
                             >
@@ -725,33 +751,129 @@ export default function KanbanContainer({
       )}
 
       {/* Cancel Confirmation Modal */}
-      {orderToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl border border-[#EBE2D5]">
-            <div className="flex items-center gap-3 text-rose-600 mb-4">
-              <AlertTriangle className="h-6 w-6" />
-              <h2 className="text-lg font-bold font-serif">Cancelar Pedido</h2>
-            </div>
-            <p className="text-sm text-[#6B5A4B] mb-6">
-              Tem certeza que deseja cancelar este pedido? Ele será removido do painel, mas continuará registrado no histórico.
-            </p>
-            <div className="flex gap-3">
-              <button
-                onClick={() => setOrderToDelete(null)}
-                className="flex-1 bg-[#FAF7F2] border border-[#EBE2D5] hover:bg-[#F5EFE6] text-[#2E251B] font-semibold py-2.5 rounded-xl text-sm transition-colors cursor-pointer"
-              >
-                Voltar
-              </button>
-              <button
-                onClick={handleCancelOrder}
-                className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-semibold py-2.5 rounded-xl text-sm transition-colors cursor-pointer shadow-sm shadow-rose-600/20"
-              >
-                Sim, Cancelar
-              </button>
+      {orderToDelete && (() => {
+        const orderToCancel = orders.find((o) => o.id === orderToDelete);
+        return (
+          <div
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 animate-in fade-in duration-200"
+            onClick={() => {
+              if (!isCancelling) setOrderToDelete(null);
+            }}
+          >
+            <div
+              className="bg-white rounded-2xl p-6 max-w-md w-full shadow-2xl border border-[#EBE2D5] space-y-4"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="flex items-center justify-between border-b border-[#FAF7F2] pb-3">
+                <div className="flex items-center gap-2.5 text-rose-600">
+                  <AlertTriangle className="h-5 w-5 shrink-0" />
+                  <h2 className="text-lg font-bold font-serif text-amber-950">Cancelar Pedido</h2>
+                </div>
+                {orderToCancel && (
+                  <span className="font-mono font-extrabold text-xs bg-rose-50 text-rose-700 border border-rose-200 px-2.5 py-1 rounded-full">
+                    {formatOrderNumber(orderToCancel.id)}
+                  </span>
+                )}
+              </div>
+
+              {/* Order and Customer Summary */}
+              {orderToCancel && (
+                <div className="bg-[#FAF7F2] border border-[#EBE2D5] p-3 rounded-xl flex items-center justify-between text-xs">
+                  <div className="space-y-0.5">
+                    <p className="font-bold text-[#2E251B] flex items-center gap-1.5">
+                      <User className="h-3.5 w-3.5 text-amber-700 shrink-0" />
+                      <span>{orderToCancel.customer.name || "Cliente S/N"}</span>
+                    </p>
+                    <p className="text-[#8C7A6B] font-mono pl-5">{orderToCancel.customer.phone}</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-[#8C7A6B] text-[11px] block">Total</span>
+                    <span className="font-extrabold text-amber-950">R$ {orderToCancel.total.toFixed(2)}</span>
+                  </div>
+                </div>
+              )}
+
+              <p className="text-xs text-[#6B5A4B] leading-relaxed">
+                O pedido será removido do painel ativo, mas continuará registrado no histórico.
+              </p>
+
+              {/* WhatsApp Notification Section */}
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-[#2E251B] flex items-center gap-1.5">
+                    <MessageSquare className="h-3.5 w-3.5 text-emerald-600" />
+                    <span>Mensagem para o cliente (WhatsApp)</span>
+                  </label>
+                  <label className="flex items-center gap-1.5 text-[11px] text-[#6B5A4B] cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={notifyWhatsApp}
+                      onChange={(e) => setNotifyWhatsApp(e.target.checked)}
+                      disabled={isCancelling}
+                      className="accent-emerald-600 rounded cursor-pointer h-3.5 w-3.5"
+                    />
+                    <span>Enviar</span>
+                  </label>
+                </div>
+
+                {notifyWhatsApp && (
+                  <div className="space-y-1">
+                    <textarea
+                      value={cancelMessage}
+                      onChange={(e) => setCancelMessage(e.target.value)}
+                      disabled={isCancelling}
+                      rows={3}
+                      placeholder="Escreva a mensagem de cancelamento para o cliente..."
+                      className="w-full bg-[#FAF7F2] border border-[#EBE2D5] text-[#2E251B] rounded-xl p-3 text-xs focus:outline-none focus:border-rose-400 focus:ring-1 focus:ring-rose-400 leading-relaxed placeholder:text-[#8C7A6B]/60 resize-none transition-all disabled:opacity-60"
+                    />
+                    <div className="flex justify-between items-center text-[10px] text-[#8C7A6B]">
+                      <span>Enviado via WhatsApp da loja</span>
+                      <span>{cancelMessage.length} caracteres</span>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Error Message */}
+              {cancelError && (
+                <div className="text-xs text-rose-600 font-medium bg-rose-50 p-2.5 rounded-xl border border-rose-200">
+                  {cancelError}
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex gap-3 pt-1">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (!isCancelling) setOrderToDelete(null);
+                  }}
+                  disabled={isCancelling}
+                  className="flex-1 bg-[#FAF7F2] border border-[#EBE2D5] hover:bg-[#F5EFE6] text-[#2E251B] font-semibold py-2.5 rounded-xl text-xs transition-colors cursor-pointer disabled:opacity-60"
+                >
+                  Voltar
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCancelOrder}
+                  disabled={isCancelling}
+                  className="flex-1 bg-rose-600 hover:bg-rose-700 text-white font-semibold py-2.5 rounded-xl text-xs transition-colors cursor-pointer shadow-sm shadow-rose-600/20 flex items-center justify-center gap-2 disabled:opacity-60"
+                >
+                  {isCancelling ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      <span>Cancelando...</span>
+                    </>
+                  ) : (
+                    <span>Sim, Cancelar</span>
+                  )}
+                </button>
+              </div>
             </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }
