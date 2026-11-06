@@ -2,14 +2,14 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSocket } from "@/hooks/use-socket";
-import { Send, User, Bot, Volume2, UserCheck } from "lucide-react";
+import { Send, User, Bot, Volume2, UserCheck, FileText, Phone, ExternalLink, Image as ImageIcon } from "lucide-react";
 
 interface Message {
   id: string;
   sender: "USER" | "BOT" | "HUMAN";
   content: string;
   mediaKey?: string | null;
-  mediaType?: string | null; // image | audio | video | document
+  mediaType?: string | null; // image | audio | video | document | contact
   createdAt: string;
 }
 
@@ -22,7 +22,16 @@ interface Conversation {
   lastMessage: Message;
 }
 
-const mediaUrl = (key: string) => `/api/media/${key}`;
+const mediaUrl = (key: string) => (key.startsWith("http") || key.startsWith("/") ? key : `/api/media/${key}`);
+
+const parseContactContent = (content: string) => {
+  const match = content.match(/^\[Contato(?::\s*([^-\]]+)(?:\s*-\s*([^\]]+))?)?\]$/);
+  if (!match) return null;
+  return {
+    name: match[1]?.trim() || "Contato compartilhado",
+    phone: match[2]?.trim() || null,
+  };
+};
 
 const formatTime = (dateInput: string | Date | null | undefined) => {
   if (!dateInput) return "";
@@ -385,35 +394,89 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
                       {isUser ? "Cliente" : isBot ? "Assistente IA" : "Atendente"}
                     </span>
                       {msg.mediaKey && msg.mediaType === "image" && (
-                        /* eslint-disable-next-line @next/next/no-img-element */
-                        <img
-                          src={mediaUrl(msg.mediaKey)}
-                          alt="Mídia recebida"
-                          className="rounded-xl mb-1.5 max-h-64 border border-black/5"
-                        />
+                        <a
+                          href={mediaUrl(msg.mediaKey)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="block cursor-pointer"
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img
+                            src={mediaUrl(msg.mediaKey)}
+                            alt="Mídia recebida"
+                            className="rounded-xl mb-1.5 max-h-72 w-auto object-contain border border-black/5 hover:opacity-95 transition-opacity"
+                            loading="lazy"
+                          />
+                        </a>
                       )}
                       {msg.mediaKey && msg.mediaType === "video" && (
                         <video
                           controls
                           preload="metadata"
                           src={mediaUrl(msg.mediaKey)}
-                          className="rounded-xl mb-1.5 max-h-64"
+                          className="rounded-xl mb-1.5 max-h-72 w-auto max-w-full"
                         />
                       )}
                       {msg.mediaKey && msg.mediaType === "audio" && (
-                        <audio controls preload="metadata" src={mediaUrl(msg.mediaKey)} className="h-10 mb-1.5" />
+                        <audio controls preload="metadata" src={mediaUrl(msg.mediaKey)} className="h-10 mb-1.5 max-w-full" />
                       )}
                       {msg.mediaKey && msg.mediaType === "document" && (
                         <a
                           href={mediaUrl(msg.mediaKey)}
                           target="_blank"
                           rel="noreferrer"
-                          className="inline-flex items-center gap-1 font-semibold underline mb-1.5"
+                          className="inline-flex items-center gap-2 font-semibold text-xs sm:text-sm text-amber-900 bg-amber-500/10 hover:bg-amber-500/20 px-3.5 py-2.5 rounded-xl border border-amber-600/20 transition-colors mb-1.5"
                         >
-                          Abrir documento
+                          <FileText className="w-4 h-4 shrink-0 text-amber-700" />
+                          <span className="truncate">Abrir documento</span>
+                          <ExternalLink className="w-3.5 h-3.5 shrink-0 opacity-70 ml-auto" />
                         </a>
                       )}
-                      {!(msg.mediaKey && msg.content.startsWith("[") && msg.content.endsWith("]")) && (
+                      {(msg.mediaType === "contact" || msg.content.startsWith("[Contato")) && (() => {
+                        const contactInfo = parseContactContent(msg.content);
+                        if (!contactInfo) return null;
+                        const cleanPhone = contactInfo.phone ? contactInfo.phone.replace(/\D/g, "") : null;
+                        return (
+                          <div className="flex items-center gap-3 p-3 bg-amber-500/10 border border-amber-600/20 rounded-xl mb-1.5">
+                            <div className="w-10 h-10 rounded-full bg-amber-600/20 flex items-center justify-center text-amber-800 shrink-0">
+                              <User className="w-5 h-5" />
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <span className="font-semibold text-xs sm:text-sm text-[#2E251B] block truncate">
+                                {contactInfo.name}
+                              </span>
+                              {contactInfo.phone && (
+                                <a
+                                  href={`https://wa.me/${cleanPhone}`}
+                                  target="_blank"
+                                  rel="noreferrer"
+                                  className="text-[11px] text-amber-800 hover:underline inline-flex items-center gap-1 font-medium mt-0.5"
+                                >
+                                  <Phone className="w-3 h-3 shrink-0" />
+                                  <span>{contactInfo.phone}</span>
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
+                      {/* Indicador para mensagens legadas onde o arquivo de mídia não foi gravado */}
+                      {!msg.mediaKey &&
+                        !msg.content.startsWith("[Contato") &&
+                        msg.content.startsWith("[") &&
+                        msg.content.endsWith("]") &&
+                        ["[Foto]", "[Vídeo]", "[Áudio]", "[Documento]", "[Figurinha]"].includes(msg.content) && (
+                          <div className="flex items-center gap-2 text-xs text-[#8C7A6B] bg-[#FAF7F2] border border-[#EBE2D5] px-3 py-2 rounded-xl italic mb-1.5">
+                            <ImageIcon className="w-4 h-4 text-[#A09384] shrink-0" />
+                            <span>{msg.content.slice(1, -1)} recebida (arquivo indisponível)</span>
+                          </div>
+                        )}
+                      {!(
+                        msg.content.startsWith("[Contato") ||
+                        (msg.content.startsWith("[") &&
+                          msg.content.endsWith("]") &&
+                          ["[Foto]", "[Vídeo]", "[Áudio]", "[Documento]", "[Figurinha]"].includes(msg.content))
+                      ) && (
                         <p className="whitespace-pre-line leading-relaxed">{msg.content}</p>
                       )}
                       <span className="text-[9px] text-[#8C7A6B] mt-1.5 self-end font-light">

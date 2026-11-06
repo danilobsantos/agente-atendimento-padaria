@@ -160,3 +160,50 @@ export function resolveCustomerPhone(
   // If all candidates were LIDs or non-phone identifiers, return null
   return null;
 }
+
+export interface ParsedContact {
+  name: string;
+  phone?: string;
+}
+
+/**
+ * Extrai os contatos de mensagens contactMessage ou contactsArrayMessage do WhatsApp.
+ * Suporta o formato vCard padrão procurando por waid ou campos TEL.
+ */
+export function parseContactMessage(message: Record<string, unknown>): ParsedContact[] {
+  const result: ParsedContact[] = [];
+
+  const extractVcardPhone = (vcard?: string): string | undefined => {
+    if (!vcard) return undefined;
+    // 1. Prioriza waid=5511...
+    const waidMatch = vcard.match(/waid=(\d+)/i);
+    if (waidMatch?.[1]) return waidMatch[1];
+    // 2. Campo TEL (ex.: TEL;type=CELL;waid=... ou TEL;type=CELL:+55 11 99999-9999)
+    const telMatch = vcard.match(/TEL[^:]*:([^\r\n]+)/i);
+    if (telMatch?.[1]) {
+      return telMatch[1].trim();
+    }
+    return undefined;
+  };
+
+  const contact = message.contactMessage as { displayName?: string; vcard?: string } | undefined;
+  if (contact) {
+    const name = contact.displayName || "Contato";
+    const phone = extractVcardPhone(contact.vcard);
+    result.push({ name, phone });
+  }
+
+  const contactsArr = message.contactsArrayMessage as {
+    displayName?: string;
+    contacts?: Array<{ displayName?: string; vcard?: string }>;
+  } | undefined;
+  if (Array.isArray(contactsArr?.contacts)) {
+    for (const c of contactsArr.contacts) {
+      const name = c.displayName || "Contato";
+      const phone = extractVcardPhone(c.vcard);
+      result.push({ name, phone });
+    }
+  }
+
+  return result;
+}

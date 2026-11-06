@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getPhoneLookupVariants } from "@/lib/utils/company";
-import { resolveCustomerPhone } from "@/lib/utils/whatsapp";
+import { resolveCustomerPhone, parseContactMessage } from "@/lib/utils/whatsapp";
 import { botSecret } from "@/lib/utils/api-auth";
 import { ingestInboundMedia, refreshCustomerAvatar } from "@/lib/services/media.service";
 
@@ -26,12 +26,23 @@ export async function POST(request: Request) {
     // Evolution Go wraps the message in data.Info (metadata) and data.Message (content).
     const data = payload.data ?? {};
     const info = data.Info ?? {};
-    const rawMessage = data.Message ?? data.message ?? {};
-    const message =
-      rawMessage.ephemeralMessage?.message ??
-      rawMessage.viewOnceMessage?.message ??
-      rawMessage.viewOnceMessageV2?.message ??
-      rawMessage;
+    const rawMessage = (data.Message ?? data.message ?? {}) as Record<string, any>;
+    let message: Record<string, any> = rawMessage;
+    let unwrapping = true;
+    while (unwrapping && message && typeof message === "object") {
+      const rec = message as Record<string, any>;
+      const inner =
+        rec.ephemeralMessage?.message ||
+        rec.viewOnceMessage?.message ||
+        rec.viewOnceMessageV2?.message ||
+        rec.viewOnceMessageV2Extension?.message ||
+        rec.documentWithCaptionMessage?.message;
+      if (inner && typeof inner === "object") {
+        message = inner;
+      } else {
+        unwrapping = false;
+      }
+    }
 
     const isFromMe = Boolean(info.IsFromMe ?? data.key?.fromMe);
     const messageId = String(data.key?.id || info.Id || info.id || "");
@@ -80,6 +91,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ status: "skipped_invalid_phone" });
     }
 
+    // Extrai dados de contato quando cliente compartilha vCard/contato
+    const contacts = parseContactMessage(message);
+    const contactText = contacts.length > 0
+      ? contacts.map((c) => `[Contato: ${c.name}${c.phone ? ` - ${c.phone}` : ""}]`).join("\n")
+      : "";
+
     // Extract text content (supports conversation, extendedTextMessage, captions, media markers, and button/list replies)
     const text =
       message.conversation ||
@@ -87,13 +104,14 @@ export async function POST(request: Request) {
       message.imageMessage?.caption ||
       (message.imageMessage ? "[Foto]" : "") ||
       message.videoMessage?.caption ||
-      (message.videoMessage ? "[Vídeo]" : "") ||
+      (message.videoMessage || message.ptvMessage ? "[Vídeo]" : "") ||
       message.documentMessage?.caption ||
       message.documentMessage?.fileName ||
       (message.documentMessage ? "[Documento]" : "") ||
       (message.audioMessage ? "[Áudio]" : "") ||
       (message.stickerMessage ? "[Figurinha]" : "") ||
       (message.locationMessage ? "[Localização]" : "") ||
+      contactText ||
       (message.contactMessage || message.contactsArrayMessage ? "[Contato]" : "") ||
       message.buttonsResponseMessage?.selectedDisplayText ||
       message.buttonsResponseMessage?.selectedButtonId ||
@@ -166,10 +184,16 @@ export async function POST(request: Request) {
     // Mídia anexada: baixa no Evolution, sobe para o MinIO e projeta o texto
     // (transcrição substitui [Áudio]; caption substitui [Foto]/[Vídeo]).
     const attachedMedia = Boolean(
-      message.imageMessage || message.audioMessage || message.videoMessage || message.documentMessage || message.stickerMessage
+      message.imageMessage ||
+      message.audioMessage ||
+      message.videoMessage ||
+      message.ptvMessage ||
+      message.documentMessage ||
+      message.stickerMessage
     );
-    const ingested = attachedMedia ? await ingestInboundMedia(tenant.id, message) : null;
+    const ingested = attachedMedia ? await ingestInboundMedia(tenant.id, message, rawMessage) : null;
     const content = ingested?.text || text;
+    const resolvedMediaType = ingested?.mediaType || (contacts.length > 0 ? "contact" : null);
 
     // Handle messages sent from other devices (WhatsApp mobile app, WhatsApp Web)
     if (isFromMe) {
@@ -200,7 +224,7 @@ export async function POST(request: Request) {
           sender: "HUMAN",
           content,
           mediaKey: ingested?.mediaKey || null,
-          mediaType: ingested?.mediaType || null,
+          mediaType: resolvedMediaType,
         },
       });
 
@@ -246,7 +270,7 @@ export async function POST(request: Request) {
         sender: "USER",
         content,
         mediaKey: ingested?.mediaKey || null,
-        mediaType: ingested?.mediaType || null,
+        mediaType: resolvedMediaType,
       },
     });
 

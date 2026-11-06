@@ -46,7 +46,7 @@ export class EvolutionGoService {
   private instanceToken: string;
 
   constructor(config?: Partial<EvolutionGoConfig>) {
-    this.baseUrl = config?.baseUrl || process.env.EVOLUTION_API_URL || "http://localhost:8080";
+    this.baseUrl = (config?.baseUrl || process.env.EVOLUTION_API_URL || "http://localhost:8080").replace(/\/+$/, "");
     this.apiKey = config?.apiKey || process.env.EVOLUTION_API_KEY || "";
     this.instanceName = config?.instanceName || process.env.EVOLUTION_INSTANCE_NAME || "default";
     this.instanceToken = config?.instanceToken || process.env.EVOLUTION_INSTANCE_TOKEN || "";
@@ -220,8 +220,7 @@ export class EvolutionGoService {
   }
 
   // POST /message/downloadmedia — corpo: { message: <waE2E.Message cru do
-  // webhook> }. Resposta gin.H sem contrato no swagger; o campo base64 é
-  // procurado nas variantes conhecidas e 404/erro vira null (placeholder).
+  // webhook> }. No Evolution Go, a resposta é gin.H: { message: "success", data: { base64: "...", timestamp: "..." } }.
   async downloadMedia(rawMessage: unknown): Promise<{ buffer: Buffer; mimetype: string } | null> {
     try {
       const body = await this.jsonFetch<Record<string, unknown>>(`${this.baseUrl}/message/downloadmedia`, {
@@ -230,22 +229,55 @@ export class EvolutionGoService {
         body: JSON.stringify({ message: rawMessage }),
       });
 
-      let b64: string | null =
-        typeof body.base64 === "string"
-          ? body.base64
-          : typeof body.data === "string"
-            ? body.data
-            : null;
-      if (!b64) return null;
-      // resposta pode vir como data: URI ou base64 cru
-      b64 = b64.replace(/^data:[^;]*;base64,/, "");
+      let b64: string | null = null;
+      let mimetype: string | null = null;
 
-      const mimetype =
-        typeof body.mimetype === "string"
-          ? body.mimetype
-          : typeof body.mimeType === "string"
-            ? body.mimeType
-            : "application/octet-stream";
+      if (typeof body.base64 === "string") {
+        b64 = body.base64;
+      } else if (typeof body.data === "string") {
+        b64 = body.data;
+      } else if (body.data && typeof body.data === "object") {
+        const dataObj = body.data as Record<string, unknown>;
+        if (typeof dataObj.base64 === "string") b64 = dataObj.base64;
+        else if (typeof dataObj.data === "string") b64 = dataObj.data;
+        if (typeof dataObj.mimetype === "string") mimetype = dataObj.mimetype;
+        else if (typeof dataObj.mimeType === "string") mimetype = dataObj.mimeType;
+      } else if (body.result && typeof body.result === "object") {
+        const resObj = body.result as Record<string, unknown>;
+        if (typeof resObj.base64 === "string") b64 = resObj.base64;
+        if (typeof resObj.mimetype === "string") mimetype = resObj.mimetype;
+      }
+
+      if (!b64) {
+        console.error("[EvolutionGo] downloadMedia resposta sem base64:", JSON.stringify(body).slice(0, 300));
+        return null;
+      }
+
+      // Se veio no formato data URL (data:image/jpeg;base64,...), extrai o mimetype e o payload limpo
+      if (b64.startsWith("data:")) {
+        const commaIdx = b64.indexOf(",");
+        if (commaIdx !== -1) {
+          const prefix = b64.slice(5, commaIdx);
+          const semiIdx = prefix.indexOf(";");
+          const extractedMime = semiIdx !== -1 ? prefix.slice(0, semiIdx) : prefix;
+          if (extractedMime && !mimetype) {
+            mimetype = extractedMime;
+          }
+          b64 = b64.slice(commaIdx + 1);
+        }
+      } else {
+        b64 = b64.replace(/^data:[^;]*;base64,/, "");
+      }
+
+      if (!mimetype) {
+        mimetype =
+          typeof body.mimetype === "string"
+            ? body.mimetype
+            : typeof body.mimeType === "string"
+              ? body.mimeType
+              : "application/octet-stream";
+      }
+
       const b64u = Buffer.from(b64, "base64");
       if (!b64u.length) return null;
       return { buffer: b64u, mimetype };

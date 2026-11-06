@@ -41,7 +41,7 @@ export function detectMedia(message: Record<string, unknown>): MediaDetection | 
   if (image) return { mediaType: "image", mimetype: image.mimetype || "image/jpeg", fallbackText: image.caption || "[Foto]" };
   const audio = message.audioMessage as { mimetype?: string; ptt?: boolean } | undefined;
   if (audio) return { mediaType: "audio", mimetype: audio.mimetype || "audio/ogg", fallbackText: "[Áudio]" };
-  const video = message.videoMessage as { caption?: string; mimetype?: string } | undefined;
+  const video = (message.videoMessage || message.ptvMessage) as { caption?: string; mimetype?: string } | undefined;
   if (video) return { mediaType: "video", mimetype: video.mimetype || "video/mp4", fallbackText: video.caption || "[Vídeo]" };
   const doc = message.documentMessage as { caption?: string; mimetype?: string; fileName?: string } | undefined;
   if (doc) return { mediaType: "document", mimetype: doc.mimetype || "application/octet-stream", fallbackText: doc.caption || doc.fileName || "[Documento]" };
@@ -52,30 +52,81 @@ export function detectMedia(message: Record<string, unknown>): MediaDetection | 
 }
 
 /**
- * Baixa a mídia no Evolution Go (/message/downloadmedia recebe o waE2E.Message
- * cru que o webhook passou por parâmetro), sobe para o MinIO e devolve key +
- * projeção de texto. null = não é mídia (ou falhou e o fluxo segue com o texto).
+ * Processa a mídia recebida:
+ * 1. Usa o base64 direto se o Evolution Go já entregou pré-baixado (ex.: WebhookFiles).
+ * 2. Caso contrário, solicita o download via /message/downloadmedia no Evolution Go.
+ * 3. Faz o upload para o MinIO/S3 e devolve a key gerada + projeção de texto.
+ * null = não é mídia (ou falhou e o fluxo segue com o texto de fallback).
  */
-export async function ingestInboundMedia(tenantId: string, rawMessage: unknown): Promise<IngestedMedia | null> {
+export async function ingestInboundMedia(
+  tenantId: string,
+  rawMessage: unknown,
+  outerPayload?: unknown
+): Promise<IngestedMedia | null> {
   if (!rawMessage || typeof rawMessage !== "object") return null;
-  const detection = detectMedia(rawMessage as Record<string, unknown>);
+  const msgObj = rawMessage as Record<string, unknown>;
+  const detection = detectMedia(msgObj);
   if (!detection) return null;
 
   try {
-    const service = await getEvolutionServiceForTenant(tenantId);
-    const media = await service.downloadMedia(rawMessage);
-    if (!media || media.buffer.length > MAX_BYTES) {
-      console.error("[media] download vazio/excedido:", detection.mediaType);
+    let mediaBuffer: Buffer | null = null;
+    let detectedMime = detection.mimetype;
+
+    // 1. Checa se o webhook já veio com a mídia em base64
+    const directBase64 =
+      typeof msgObj.base64 === "string"
+        ? msgObj.base64
+        : outerPayload && typeof outerPayload === "object" && typeof (outerPayload as Record<string, unknown>).base64 === "string"
+          ? ((outerPayload as Record<string, unknown>).base64 as string)
+          : null;
+
+    if (directBase64) {
+      let b64 = directBase64;
+      if (b64.startsWith("data:")) {
+        const commaIdx = b64.indexOf(",");
+        if (commaIdx !== -1) {
+          const prefix = b64.slice(5, commaIdx);
+          const semiIdx = prefix.indexOf(";");
+          const extractedMime = semiIdx !== -1 ? prefix.slice(0, semiIdx) : prefix;
+          if (extractedMime) detectedMime = extractedMime;
+          b64 = b64.slice(commaIdx + 1);
+        }
+      } else {
+        b64 = b64.replace(/^data:[^;]*;base64,/, "");
+      }
+      const buf = Buffer.from(b64, "base64");
+      if (buf.length > 0 && buf.length <= MAX_BYTES) {
+        mediaBuffer = buf;
+      }
+    }
+
+    // 2. Se não veio direto em base64, solicita o download via Evolution Go
+    if (!mediaBuffer) {
+      const service = await getEvolutionServiceForTenant(tenantId);
+      // Mapeia ptvMessage para videoMessage para que o endpoint de download do Evolution Go reconheça
+      const payloadToSend = msgObj.ptvMessage && !msgObj.videoMessage
+        ? { ...msgObj, videoMessage: msgObj.ptvMessage }
+        : msgObj;
+
+      const media = await service.downloadMedia(payloadToSend);
+      if (media && media.buffer.length > 0 && media.buffer.length <= MAX_BYTES) {
+        mediaBuffer = media.buffer;
+        if (media.mimetype) detectedMime = media.mimetype;
+      }
+    }
+
+    if (!mediaBuffer) {
+      console.error("[media] download vazio ou falhou para:", detection.mediaType);
       return { mediaKey: "", mediaType: detection.mediaType, text: detection.fallbackText };
     }
 
-    const ext = extFromMimetype(detection.mimetype);
+    const ext = extFromMimetype(detectedMime);
     const key = `media/${tenantId}/${crypto.randomUUID()}.${ext}`;
-    await putObject(key, media.buffer, detection.mimetype);
+    await putObject(key, mediaBuffer, detectedMime);
 
     let text = detection.fallbackText;
     if (detection.mediaType === "audio") {
-      const transcript = await transcribeAudio(media.buffer, detection.mimetype);
+      const transcript = await transcribeAudio(mediaBuffer, detectedMime);
       if (transcript) text = transcript;
     }
 
