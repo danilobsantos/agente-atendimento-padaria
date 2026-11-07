@@ -122,17 +122,14 @@ describe("Evolution Webhook - External Device Message Synchronization", () => {
     assert.equal(res.status, 200);
     assert.equal(json.status, "captured_external_human");
 
-    // B5: o silêncio é uma janela, não um flag permanente — antes o bot nunca
-    // voltava a atender o cliente depois de uma resposta enviada pelo celular.
+    // Quando um atendente responde pelo celular ou sistema, a IA é pausada (isHumanAttending = true)
     const customer = await prisma.customer.findFirst({
       where: { tenantId, phone: testPhone },
       include: { chatMessages: true },
     });
 
     assert.ok(customer, "Customer should be created");
-    assert.equal(customer.isHumanAttending, false, "isHumanAttending é do botão 'assumir', não da resposta pelo celular");
-    assert.ok(customer.botSilencedUntil, "botSilencedUntil must be set");
-    assert.equal(customer.botSilencedUntil!.getTime() > Date.now(), true);
+    assert.equal(customer.isHumanAttending, true, "isHumanAttending deve ser true para pausar atendimento da IA");
     assert.equal(customer.chatMessages.length, 1);
     assert.equal(customer.chatMessages[0].sender, "HUMAN");
     assert.equal(customer.chatMessages[0].content, externalText);

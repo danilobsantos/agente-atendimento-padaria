@@ -325,10 +325,11 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
         }
         setInputText("");
 
-        const activeCustomer = conversations.find((c) => c.customerId === activeCustomerId);
-        if (activeCustomer && !activeCustomer.isHumanAttending) {
-          await toggleHandover(activeCustomerId, false);
-        }
+        setConversations((prev) =>
+          prev.map((c) =>
+            c.customerId === activeCustomerId ? { ...c, isHumanAttending: true } : c
+          )
+        );
       }
     } catch (err) {
       console.error("Error sending message:", err);

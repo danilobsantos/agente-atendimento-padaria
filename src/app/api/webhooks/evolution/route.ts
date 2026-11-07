@@ -228,13 +228,20 @@ export async function POST(request: Request) {
         },
       });
 
-      // Humano respondeu pelo celular: silencia o bot por uma janela, sem
-      // marcar `isHumanAttending` (esse flag é do botão "assumir" do painel).
-      // Antes, este trecho silenciava o bot para sempre (B5).
+      // Humano respondeu pelo celular: pausa o atendimento da IA
       customer = await prisma.customer.update({
         where: { id: customer.id },
-        data: { botSilencedUntil: new Date(Date.now() + HUMAN_REPLY_SILENCE_MS) },
+        data: { isHumanAttending: true, botSilencedUntil: null },
       });
+
+      // Libera qualquer buffer pendente para o cliente
+      try {
+        const { MessageBuffer } = await import("@/lib/bot/message-buffer");
+        await MessageBuffer.releaseLock(tenant.id, customer.id).catch(() => {});
+        await MessageBuffer.consumeMessages(tenant.id, customer.id).catch(() => {});
+      } catch (err) {
+        console.warn("[Webhook:Evolution] Failed to clear message buffer:", err);
+      }
 
       // Publish event to Redis for WebSocket broadcast (chat message & customer status update)
       const { redisChannel, redisPub } = await import("@/lib/redis");

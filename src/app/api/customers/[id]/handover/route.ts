@@ -25,7 +25,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const customer = await prisma.customer.update({
     where: { id },
-    data: { isHumanAttending },
+    data: { isHumanAttending, botSilencedUntil: null },
   });
 
   const { redisChannel, redisPub } = await import("@/lib/redis");

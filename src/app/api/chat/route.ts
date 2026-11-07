@@ -250,8 +250,17 @@ export async function POST(request: Request) {
     // Human replied from the panel: take over the conversation.
     const customer = await prisma.customer.update({
       where: { id: customerId },
-      data: { isHumanAttending: true },
+      data: { isHumanAttending: true, botSilencedUntil: null },
     });
+
+    // Libera qualquer buffer pendente para o cliente
+    try {
+      const { MessageBuffer } = await import("@/lib/bot/message-buffer");
+      await MessageBuffer.releaseLock(customer.tenantId, customer.id).catch(() => {});
+      await MessageBuffer.consumeMessages(customer.tenantId, customer.id).catch(() => {});
+    } catch (err) {
+      console.warn("[Chat] Failed to clear message buffer:", err);
+    }
 
     {
       const { redisChannel, redisPub } = await import("@/lib/redis");
