@@ -53,6 +53,7 @@ export async function GET(request: Request) {
   const pageSize = Math.max(1, Math.min(100, parseInt(searchParams.get("limit") || "30", 10)));
   const offset = (page - 1) * pageSize;
   const filter = (searchParams.get("filter") || "all").toLowerCase(); // "all" | "unread" | "ia"
+  const search = (searchParams.get("search") || "").trim();
 
   try {
     // Garante com segurança que a coluna last_read_at exista
@@ -110,9 +111,18 @@ export async function GET(request: Request) {
           COUNT(*) OVER()::int AS "filteredTotalMatching"
         FROM customer_stats cs
         WHERE 
-          ($2 = 'unread' AND COALESCE(cs."unreadCount", 0) > 0) OR
-          ($2 = 'ia' AND COALESCE(cs."isHumanAttending", false) = false) OR
-          ($2 NOT IN ('unread', 'ia'))
+          (($2 = 'unread' AND COALESCE(cs."unreadCount", 0) > 0) OR
+           ($2 = 'ia' AND COALESCE(cs."isHumanAttending", false) = false) OR
+           ($2 NOT IN ('unread', 'ia')))
+          AND (
+            $5 = '' OR
+            cs."customerName" ILIKE '%' || $5 || '%' OR
+            cs."phone" ILIKE '%' || $5 || '%' OR
+            (
+              REGEXP_REPLACE($5, '\D', '', 'g') <> '' AND 
+              REGEXP_REPLACE(cs."phone", '\D', '', 'g') ILIKE '%' || REGEXP_REPLACE($5, '\D', '', 'g') || '%'
+            )
+          )
         ORDER BY cs."lastMessageCreatedAt" DESC
         LIMIT $3 OFFSET $4
       )
@@ -126,7 +136,8 @@ export async function GET(request: Request) {
       user.tenantId,
       filter,
       pageSize,
-      offset
+      offset,
+      search
     );
 
     const firstRow = rows[0];
@@ -169,6 +180,14 @@ export async function GET(request: Request) {
         tenantId: user.tenantId,
         chatMessages: { some: {} },
         ...(filter === "ia" ? { isHumanAttending: false } : {}),
+        ...(search
+          ? {
+              OR: [
+                { name: { contains: search, mode: "insensitive" } },
+                { phone: { contains: search, mode: "insensitive" } },
+              ],
+            }
+          : {}),
       },
       include: {
         chatMessages: {
@@ -188,6 +207,16 @@ export async function GET(request: Request) {
           const lastMsg = c.chatMessages[0];
           if (!lastMsg || lastMsg.sender !== "USER") return false;
           if (c.lastReadAt && c.lastReadAt >= lastMsg.createdAt) return false;
+        }
+        if (search) {
+          const s = search.toLowerCase();
+          const sDigits = s.replace(/\D/g, "");
+          const nameMatch = (c.name || "").toLowerCase().includes(s);
+          const phone = c.phone || "";
+          const phoneMatch =
+            phone.toLowerCase().includes(s) ||
+            (sDigits !== "" && phone.replace(/\D/g, "").includes(sDigits));
+          if (!nameMatch && !phoneMatch) return false;
         }
         return true;
       })

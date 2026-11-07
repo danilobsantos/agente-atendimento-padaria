@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSocket } from "@/hooks/use-socket";
-import { Send, User, Bot, Volume2, UserCheck, FileText, Phone, ExternalLink, Image as ImageIcon, Loader2 } from "lucide-react";
+import { Send, User, Bot, Volume2, UserCheck, FileText, Phone, ExternalLink, Image as ImageIcon, Loader2, Search, X } from "lucide-react";
 
 interface Message {
   id: string;
@@ -59,6 +59,11 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
     activeFilterRef.current = activeFilter;
   }, [activeFilter]);
 
+  // Search
+  const [searchQuery, setSearchQuery] = useState("");
+  const searchQueryRef = useRef("");
+  const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
+
   const [page, setPage] = useState<number>(1);
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
@@ -70,13 +75,24 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
 
   // Fetch recent conversations list with pagination & filters
   const fetchConversations = useCallback(
-    async (targetPage = 1, filterOverride?: "all" | "unread" | "ia", append = false) => {
+    async (
+      targetPage = 1,
+      filterOverride?: "all" | "unread" | "ia",
+      searchOverride?: string,
+      append = false
+    ) => {
       const currentFilter = filterOverride || activeFilterRef.current;
+      const currentSearch = searchOverride !== undefined ? searchOverride : searchQueryRef.current;
       if (append) {
         setIsLoadingMore(true);
       }
       try {
-        const res = await fetch(`/api/chat?page=${targetPage}&limit=30&filter=${currentFilter}`);
+        const searchParam = currentSearch.trim()
+          ? `&search=${encodeURIComponent(currentSearch.trim())}`
+          : "";
+        const res = await fetch(
+          `/api/chat?page=${targetPage}&limit=30&filter=${currentFilter}${searchParam}`
+        );
         if (res.ok) {
           const data = await res.json();
           const list: Conversation[] = Array.isArray(data) ? data : data.conversations || [];
@@ -106,13 +122,39 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
     []
   );
 
+  const handleSearchChange = (val: string) => {
+    setSearchQuery(val);
+    searchQueryRef.current = val;
+
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+
+    searchDebounceRef.current = setTimeout(() => {
+      setPage(1);
+      setHasMore(true);
+      fetchConversations(1, activeFilterRef.current, val, false);
+    }, 300);
+  };
+
+  const handleClearSearch = () => {
+    setSearchQuery("");
+    searchQueryRef.current = "";
+    if (searchDebounceRef.current) {
+      clearTimeout(searchDebounceRef.current);
+    }
+    setPage(1);
+    setHasMore(true);
+    fetchConversations(1, activeFilterRef.current, "", false);
+  };
+
   const handleFilterChange = (newFilter: "all" | "unread" | "ia") => {
     if (newFilter === activeFilter) return;
     setActiveFilter(newFilter);
     setConversations([]);
     setPage(1);
     setHasMore(true);
-    fetchConversations(1, newFilter, false);
+    fetchConversations(1, newFilter, searchQueryRef.current, false);
   };
 
   const handleSidebarScroll = (e: React.UIEvent<HTMLDivElement>) => {
@@ -120,7 +162,7 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
     if (isLoadingMore || !hasMore) return;
     const scrollBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
     if (scrollBottom < 80) {
-      fetchConversations(page + 1, activeFilterRef.current, true);
+      fetchConversations(page + 1, activeFilterRef.current, searchQueryRef.current, true);
     }
   };
 
@@ -158,7 +200,7 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
   // Initialize on mount only
   useEffect(() => {
     const timer = setTimeout(() => {
-      fetchConversations(1, "all", false);
+      fetchConversations(1, "all", "", false);
     }, 0);
     return () => clearTimeout(timer);
   }, [fetchConversations]);
@@ -341,8 +383,20 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
   const activeCustomer = conversations.find((c) => c.customerId === activeCustomerId);
 
   const displayedConversations = conversations.filter((conv) => {
-    if (activeFilter === "unread") return (conv.unreadCount || 0) > 0;
-    if (activeFilter === "ia") return !conv.isHumanAttending;
+    if (activeFilter === "unread" && (conv.unreadCount || 0) <= 0) return false;
+    if (activeFilter === "ia" && conv.isHumanAttending) return false;
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      const qDigits = q.replace(/\D/g, "");
+      const name = (conv.customerName || "").toLowerCase();
+      const phone = (conv.phone || "").toLowerCase();
+      const phoneDigits = phone.replace(/\D/g, "");
+
+      const matchesName = name.includes(q);
+      const matchesPhone = phone.includes(q) || (qDigits !== "" && phoneDigits.includes(qDigits));
+
+      if (!matchesName && !matchesPhone) return false;
+    }
     return true;
   });
 
@@ -353,12 +407,35 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
         className={`w-full md:w-80 border-r border-[#EBE2D5] bg-white flex-col shrink-0 shadow-[4px_0_24px_rgba(46,37,27,0.01)] ${activeCustomerId ? "hidden md:flex" : "flex"
           }`}
       >
-        <div className="p-3 sm:p-4 border-b border-[#EBE2D5] bg-white space-y-3 shrink-0">
+        <div className="p-3 sm:p-4 border-b border-[#EBE2D5] bg-white space-y-2.5 shrink-0">
           <div className="flex justify-between items-center">
             <h2 className="font-serif font-bold text-lg text-amber-950">Conversas</h2>
             <span className="text-xs bg-[#FAF7F2] border border-[#EBE2D5] px-2.5 py-0.5 rounded-full font-bold text-amber-800">
-              {activeFilter === "all" ? totalCount : displayedConversations.length}
+              {activeFilter === "all" && !searchQuery.trim() ? totalCount : displayedConversations.length}
             </span>
+          </div>
+
+          {/* Search Input */}
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-[#8C7A6B] pointer-events-none" />
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="Pesquisar por nome ou número..."
+              className="w-full bg-[#FAF7F2] border border-[#EBE2D5] rounded-lg pl-8 pr-7 py-1.5 text-xs text-amber-950 placeholder-[#8C7A6B] focus:outline-none focus:ring-1 focus:ring-amber-500/30 focus:border-amber-500 transition-all"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={handleClearSearch}
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 text-[#8C7A6B] hover:text-amber-950 transition-colors p-1 rounded-full hover:bg-[#EBE2D5]/50 cursor-pointer"
+                title="Limpar pesquisa"
+                aria-label="Limpar pesquisa"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            )}
           </div>
 
           {/* Filter Pills (WhatsApp Style) */}
@@ -408,11 +485,13 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
         >
           {displayedConversations.length === 0 ? (
             <div className="p-6 text-center text-xs text-[#8C7A6B]">
-              {activeFilter === "unread"
-                ? "Nenhuma conversa não lida."
-                : activeFilter === "ia"
-                  ? "Nenhum cliente sendo atendido pela IA."
-                  : "Nenhuma conversa ativa no WhatsApp."}
+              {searchQuery.trim()
+                ? `Nenhuma conversa encontrada para "${searchQuery}".`
+                : activeFilter === "unread"
+                  ? "Nenhuma conversa não lida."
+                  : activeFilter === "ia"
+                    ? "Nenhum cliente sendo atendido pela IA."
+                    : "Nenhuma conversa ativa no WhatsApp."}
             </div>
           ) : (
             displayedConversations.map((conv) => {

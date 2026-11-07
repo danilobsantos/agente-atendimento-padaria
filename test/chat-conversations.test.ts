@@ -167,3 +167,94 @@ test("filters (Todas | Não lidas | IA) filter conversations correctly", () => {
   assert.deepEqual(iaList.map((c) => c.id), ["1", "2"]);
 });
 
+test("search by customer name or phone number filters conversations correctly", () => {
+  interface MockSearchConversation {
+    customerId: string;
+    customerName: string;
+    phone: string;
+    isHumanAttending: boolean;
+    unreadCount: number;
+  }
+
+  const convs: MockSearchConversation[] = [
+    {
+      customerId: "1",
+      customerName: "Danilo Santos",
+      phone: "+55 (11) 98765-4321",
+      isHumanAttending: true,
+      unreadCount: 0,
+    },
+    {
+      customerId: "2",
+      customerName: "Maria Oliveira",
+      phone: "5535999887766",
+      isHumanAttending: false,
+      unreadCount: 2,
+    },
+    {
+      customerId: "3",
+      customerName: "Carlos Eduardo",
+      phone: "(35) 91234-5678",
+      isHumanAttending: false,
+      unreadCount: 0,
+    },
+    {
+      customerId: "4",
+      customerName: "5535991112233", // cliente sem nome, telefone como fallback
+      phone: "5535991112233",
+      isHumanAttending: false,
+      unreadCount: 1,
+    },
+  ];
+
+  function searchFilter(list: MockSearchConversation[], query: string): MockSearchConversation[] {
+    const q = query.trim().toLowerCase();
+    if (!q) return list;
+    const qDigits = q.replace(/\D/g, "");
+
+    return list.filter((c) => {
+      const name = (c.customerName || "").toLowerCase();
+      const phone = (c.phone || "").toLowerCase();
+      const phoneDigits = phone.replace(/\D/g, "");
+
+      const matchesName = name.includes(q);
+      const matchesPhone = phone.includes(q) || (qDigits !== "" && phoneDigits.includes(qDigits));
+
+      return matchesName || matchesPhone;
+    });
+  }
+
+  // 1. Busca por nome case-insensitive
+  const byName = searchFilter(convs, "danilo");
+  assert.equal(byName.length, 1);
+  assert.equal(byName[0].customerId, "1");
+
+  const byPartialName = searchFilter(convs, "CARLOS");
+  assert.equal(byPartialName.length, 1);
+  assert.equal(byPartialName[0].customerId, "3");
+
+  // 2. Busca por número com dígitos puros (sem máscara)
+  const byDigits = searchFilter(convs, "987654321");
+  assert.equal(byDigits.length, 1);
+  assert.equal(byDigits[0].customerId, "1");
+
+  // 3. Busca por número com máscara digitada
+  const byMask = searchFilter(convs, "(35) 99988");
+  assert.equal(byMask.length, 1);
+  assert.equal(byMask[0].customerId, "2");
+
+  // 4. Busca por cliente identificado apenas por telefone no nome
+  const byPhoneOnly = searchFilter(convs, "99111");
+  assert.equal(byPhoneOnly.length, 1);
+  assert.equal(byPhoneOnly[0].customerId, "4");
+
+  // 5. Busca sem resultados
+  const notFound = searchFilter(convs, "Inexistente 0000");
+  assert.equal(notFound.length, 0);
+
+  // 6. Busca combinada com filtro "IA"
+  const searchIa = searchFilter(convs, "35").filter((c) => !c.isHumanAttending);
+  assert.equal(searchIa.length, 3);
+  assert.deepEqual(searchIa.map((c) => c.customerId), ["2", "3", "4"]);
+});
+
