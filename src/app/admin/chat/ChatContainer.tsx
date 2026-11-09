@@ -512,6 +512,9 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
                           src={conv.photoUrl}
                           alt=""
                           className="w-8 h-8 rounded-full object-cover border border-[#EBE2D5] shrink-0"
+                          onError={(e) => {
+                            e.currentTarget.style.display = "none";
+                          }}
                         />
                       ) : (
                         <div className="w-8 h-8 rounded-full bg-[#F5EFE6] border border-[#EBE2D5] flex items-center justify-center text-[#8C7A6B] shrink-0">
@@ -583,6 +586,9 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
                     src={activeCustomer.photoUrl}
                     alt=""
                     className="w-9 h-9 rounded-full object-cover border border-[#EBE2D5] shrink-0"
+                    onError={(e) => {
+                      e.currentTarget.style.display = "none";
+                    }}
                   />
                 ) : null}
                 <div className="min-w-0 flex-1">

@@ -287,23 +287,46 @@ export class EvolutionGoService {
     }
   }
 
-  // POST /user/avatar ({ number, preview:false }) — o endpoint observado pode
-  // trabalhar >45s; timeout curto e null (avatar é cosmético, falha tolerada).
+  // POST /user/avatar ({ number, preview:false }) — o endpoint exige o JID
+  // completo (`<telefone>@s.whatsapp.net`). Com o telefone puro ele trava
+  // (>45s) em vez de retornar erro rápido.
   async getAvatarUrl(number: string): Promise<string | null> {
+    const clean = number.replace(/\D/g, "");
+    if (!clean && !number.includes("@")) return null;
+    const jid = number.includes("@") ? number : `${clean}@s.whatsapp.net`;
+
     try {
       const body = await this.jsonFetch<Record<string, unknown>>(`${this.baseUrl}/user/avatar`, {
         method: "POST",
         signal: AbortSignal.timeout(20_000),
-        body: JSON.stringify({ number, preview: false }),
+        body: JSON.stringify({ number: jid, preview: false }),
       });
-      const withUrl = body as { url?: string; link?: string; data?: { url?: string } ; result?: { url?: string } };
+      const withUrl = body as {
+        url?: string;
+        link?: string;
+        data?: { url?: string };
+        result?: { url?: string };
+      };
       return withUrl.url ?? withUrl.link ?? withUrl.data?.url ?? withUrl.result?.url ?? null;
     } catch (err) {
-      // Avatar é cosmético; timeout do endpoint lento é uma falha esperada.
+      const message = err instanceof Error ? err.message : String(err);
+
+      // Respostas normais: contato sem foto ou foto oculta.
+      // O Evolution Go usa HTTP 500 para esses casos, então é preciso olhar a mensagem.
+      if (
+        /does not have a profile picture/i.test(message) ||
+        /hidden their profile picture/i.test(message) ||
+        /item-not-found/i.test(message)
+      ) {
+        return null;
+      }
+
       if (!(err instanceof Error && (err.name === "TimeoutError" || err.name === "AbortError"))) {
         console.error("[EvolutionGo] getAvatarUrl falhou:", err);
       }
-      return null;
+
+      // Erro transitório precisa ser distinguível de "não tem foto".
+      throw err;
     }
   }
 }

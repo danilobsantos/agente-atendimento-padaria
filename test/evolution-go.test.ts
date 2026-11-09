@@ -251,3 +251,100 @@ test("sendPresence calls /message/presence", async () => {
     globalThis.fetch = original;
   }
 });
+
+test("getAvatarUrl formats phone number as JID and returns data.url", async () => {
+  const original = globalThis.fetch;
+  let captured: CapturedRequest | null = null;
+  globalThis.fetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
+    captured = {
+      url: String(input),
+      method: init.method,
+      headers: (init.headers ?? {}) as Record<string, string>,
+      body: JSON.parse(String(init.body ?? "{}")) as Record<string, unknown>,
+    };
+    return new Response(
+      JSON.stringify({ data: { url: "https://pps.whatsapp.net/avatar.jpg" } }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  };
+  try {
+    const url = await makeService().getAvatarUrl("5511999999999");
+    assert.equal(url, "https://pps.whatsapp.net/avatar.jpg");
+    assert.equal(captured!.url, "http://evo.local/user/avatar");
+    assert.equal(captured!.method, "POST");
+    assert.deepEqual(captured!.body, {
+      number: "5511999999999@s.whatsapp.net",
+      preview: false,
+    });
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("getAvatarUrl preserves JID if already formatted", async () => {
+  const original = globalThis.fetch;
+  let captured: CapturedRequest | null = null;
+  globalThis.fetch = async (input: RequestInfo | URL, init: RequestInit = {}) => {
+    captured = {
+      url: String(input),
+      method: init.method,
+      headers: (init.headers ?? {}) as Record<string, string>,
+      body: JSON.parse(String(init.body ?? "{}")) as Record<string, unknown>,
+    };
+    return new Response(
+      JSON.stringify({ url: "https://pps.whatsapp.net/avatar-flat.jpg" }),
+      { status: 200, headers: { "Content-Type": "application/json" } }
+    );
+  };
+  try {
+    const url = await makeService().getAvatarUrl("123456789@lid");
+    assert.equal(url, "https://pps.whatsapp.net/avatar-flat.jpg");
+    assert.equal(captured!.body?.number, "123456789@lid");
+  } finally {
+    globalThis.fetch = original;
+  }
+});
+
+test("getAvatarUrl returns null on 'does not have a profile picture' without throwing", async () => {
+  const restore = mockFetch(
+    new Response("Evolution Go error: that user or group does not have a profile picture", {
+      status: 500,
+    })
+  );
+  try {
+    const url = await makeService().getAvatarUrl("5511999999999");
+    assert.equal(url, null);
+  } finally {
+    restore();
+  }
+});
+
+test("getAvatarUrl returns null on 'hidden their profile picture' without throwing", async () => {
+  const restore = mockFetch(
+    new Response("Evolution Go error: the user has hidden their profile picture from you", {
+      status: 500,
+    })
+  );
+  try {
+    const url = await makeService().getAvatarUrl("5511999999999");
+    assert.equal(url, null);
+  } finally {
+    restore();
+  }
+});
+
+test("getAvatarUrl rethrows on transient error", async () => {
+  const restore = mockFetch(
+    new Response("Internal Server Error (connection refused)", {
+      status: 500,
+    })
+  );
+  try {
+    await assert.rejects(
+      () => makeService().getAvatarUrl("5511999999999"),
+      /connection refused/
+    );
+  } finally {
+    restore();
+  }
+});

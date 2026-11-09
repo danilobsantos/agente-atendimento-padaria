@@ -281,12 +281,6 @@ export async function POST(request: Request) {
       },
     });
 
-    // Foto de contato: só no primeiro inbound (fire-and-forget; o endpoint de
-    // avatar da Evolution pode travar >45s).
-    if (!customer.photoUrl) {
-      void refreshCustomerAvatar(tenant.id, customer.id, phone);
-    }
-
     // Publish event to Redis for WebSocket broadcast
     const { redisChannel, redisPub } = await import("@/lib/redis");
     await redisPub.publish(
@@ -298,6 +292,12 @@ export async function POST(request: Request) {
         isHumanAttending: customer.isHumanAttending,
       })
     );
+
+    // Foto de contato: só no primeiro inbound. Disparado após o publish da mensagem
+    // para garantir que o painel crie/posicione a conversa antes do evento com avatar.
+    if (!customer.photoUrl) {
+      void refreshCustomerAvatar(tenant.id, customer.id, phone);
+    }
 
     // Trigger Bot Pipeline asynchronously (debounce and processing happens there)
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";

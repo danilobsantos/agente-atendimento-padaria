@@ -140,30 +140,77 @@ export async function ingestInboundMedia(
 
 /**
  * Foto do contato: baixa o avatar da Evolution e grava em `Customer.photoUrl`.
- * Tentativas sem sucesso são limitadas a uma por dia por cliente.
+ *
+ * - Trava curta (30 min) apenas para evitar chamadas concorrentes do mesmo cliente.
+ * - Contato sem foto/foto oculta: 24 h de cooldown.
+ * - Erro transitório (timeout, rede, 5xx inesperado): mantém a trava curta e
+ *   tenta de novo em 30 min.
  */
-export async function refreshCustomerAvatar(tenantId: string, customerId: string, phone: string): Promise<void> {
+export async function refreshCustomerAvatar(
+  tenantId: string,
+  customerId: string,
+  phone: string
+): Promise<void> {
   try {
-    const customer = await prisma.customer.findUnique({ where: { id: customerId }, select: { photoUrl: true } });
+    const customer = await prisma.customer.findUnique({
+      where: { id: customerId },
+      select: { photoUrl: true },
+    });
     if (!customer || customer.photoUrl) return;
 
-    // Não repita a chamada lenta a cada mensagem quando a Evolution não tem avatar.
     const { redisKey, redisPub } = await import("@/lib/redis");
-    const acquired = await redisPub.set(redisKey("avatar_attempt", tenantId, customerId), "1", "EX", 86400, "NX");
+    const lockKey = redisKey("avatar_attempt", tenantId, customerId);
+
+    // Trava curta: evita várias buscas simultâneas para o mesmo contato.
+    const acquired = await redisPub.set(lockKey, "1", "EX", 1800, "NX");
     if (acquired !== "OK") return;
 
     const service = await getEvolutionServiceForTenant(tenantId);
-    const url = await service.getAvatarUrl(phone);
-    if (!url) return;
+
+    let url: string | null;
+    try {
+      url = await service.getAvatarUrl(phone);
+    } catch (err) {
+      // Erro transitório: a trava curta expira em 30 min e a próxima mensagem tenta de novo.
+      console.error("[media] avatar: falha transitória, nova tentativa em até 30 min:", err);
+      return;
+    }
+
+    if (!url) {
+      // Contato sem foto ou com foto oculta: não vale consultar a cada mensagem.
+      await redisPub.expire(lockKey, 24 * 60 * 60);
+      return;
+    }
 
     const response = await fetch(url, { signal: AbortSignal.timeout(15_000) });
-    if (!response.ok) return;
+    if (!response.ok) {
+      // Falha no CDN do WhatsApp: mantém a trava curta para tentar de novo.
+      console.warn("[media] avatar: download falhou:", response.status);
+      return;
+    }
+
     const buffer = Buffer.from(await response.arrayBuffer());
     if (!buffer.length) return;
 
-    const key = `media/${tenantId}/avatars/${crypto.randomUUID()}.jpg`;
-    await putObject(key, buffer, "image/jpeg");
-    await prisma.customer.update({ where: { id: customerId }, data: { photoUrl: `/api/media/${key}` } });
+    // Avatares são pequenos; limite defensivo.
+    if (buffer.length > 5 * 1024 * 1024) {
+      console.warn("[media] avatar grande demais, ignorando:", buffer.length);
+      return;
+    }
+
+    const rawType = response.headers.get("content-type")?.split(";")[0]?.trim() || "image/jpeg";
+    const contentType = rawType.startsWith("image/") ? rawType : "image/jpeg";
+    const ext = extFromMimetype(contentType);
+
+    const key = `media/${tenantId}/avatars/${crypto.randomUUID()}.${ext}`;
+    await putObject(key, buffer, contentType);
+    await prisma.customer.update({
+      where: { id: customerId },
+      data: { photoUrl: `/api/media/${key}` },
+    });
+
+    // Sucesso: mantém o cooldown; o photoUrl já evita novas buscas.
+    await redisPub.expire(lockKey, 24 * 60 * 60);
 
     // Painel atualiza o avatar em tempo real junto com o evento de customer.
     const { redisChannel } = await import("@/lib/redis");

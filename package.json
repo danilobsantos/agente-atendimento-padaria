@@ -12,7 +12,8 @@
     "test:e2e": "RUN_E2E=1 tsx --test test/bot-flow-e2e.test.ts",
     "db:clean": "tsx prisma/clean.ts",
     "db:import-cardapio": "tsx prisma/import-cardapio.ts",
-    "db:import-sag": "tsx prisma/import-produtos-sag.ts"
+    "db:import-sag": "tsx prisma/import-produtos-sag.ts",
+    "db:backfill-avatars": "tsx prisma/backfill-avatars.ts"
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "^3.0.2",
