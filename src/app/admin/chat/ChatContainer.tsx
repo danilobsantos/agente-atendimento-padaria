@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useSocket } from "@/hooks/use-socket";
+import { mergeUniqueConversations } from "@/lib/utils/chat-merge";
 import { Send, User, Bot, Volume2, UserCheck, FileText, Phone, ExternalLink, Image as ImageIcon, Loader2, Search, X } from "lucide-react";
 
 interface Message {
@@ -65,6 +66,10 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
   const searchDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
   const [page, setPage] = useState<number>(1);
+  const pageRef = useRef<number>(1);
+  const isFetchingListRef = useRef<boolean>(false);
+  const queryVersionRef = useRef<number>(0);
+
   const [hasMore, setHasMore] = useState<boolean>(true);
   const [isLoadingMore, setIsLoadingMore] = useState<boolean>(false);
   const [totalCount, setTotalCount] = useState<number>(0);
@@ -72,6 +77,12 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const { socket } = useSocket(tenantId);
+
+  const resetPagination = () => {
+    pageRef.current = 1;
+    setPage(1);
+    setHasMore(true);
+  };
 
   // Fetch recent conversations list with pagination & filters
   const fetchConversations = useCallback(
@@ -83,6 +94,14 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
     ) => {
       const currentFilter = filterOverride || activeFilterRef.current;
       const currentSearch = searchOverride !== undefined ? searchOverride : searchQueryRef.current;
+
+      // Trava atômica síncrona: impede requisições concorrentes de append
+      if (append && isFetchingListRef.current) return;
+
+      // Nova busca/filtro (append = false) invalida respostas anteriores em voo
+      const version = append ? queryVersionRef.current : ++queryVersionRef.current;
+
+      isFetchingListRef.current = true;
       if (append) {
         setIsLoadingMore(true);
       }
@@ -93,30 +112,38 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
         const res = await fetch(
           `/api/chat?page=${targetPage}&limit=30&filter=${currentFilter}${searchParam}`
         );
-        if (res.ok) {
-          const data = await res.json();
-          const list: Conversation[] = Array.isArray(data) ? data : data.conversations || [];
-          const more = Boolean(data.hasMore);
-          const count = typeof data.totalCount === "number" ? data.totalCount : list.length;
-          const unread = typeof data.totalUnread === "number" ? data.totalUnread : 0;
+        if (!res.ok) return;
 
-          setConversations((prev) => (append ? [...prev, ...list] : list));
-          setHasMore(more);
-          setPage(targetPage);
-          setTotalCount(count);
-          setTotalUnread(unread);
+        const data = await res.json();
 
-          if (!append) {
-            setActiveCustomerId((prev) => {
-              if (prev && list.some((c) => c.customerId === prev)) return prev;
-              return list.length > 0 ? list[0].customerId : null;
-            });
-          }
+        // Resposta de busca/filtro desatualizada: descarta
+        if (version !== queryVersionRef.current) return;
+
+        const list: Conversation[] = Array.isArray(data) ? data : data.conversations || [];
+        const more = Boolean(data.hasMore);
+        const count = typeof data.totalCount === "number" ? data.totalCount : list.length;
+        const unread = typeof data.totalUnread === "number" ? data.totalUnread : 0;
+
+        setConversations((prev) => (append ? mergeUniqueConversations(prev, list) : list));
+        setHasMore(more);
+        pageRef.current = targetPage;
+        setPage(targetPage);
+        setTotalCount(count);
+        setTotalUnread(unread);
+
+        if (!append) {
+          setActiveCustomerId((prev) => {
+            if (prev && list.some((c) => c.customerId === prev)) return prev;
+            return list.length > 0 ? list[0].customerId : null;
+          });
         }
       } catch (err) {
         console.error("Error fetching conversations:", err);
       } finally {
-        setIsLoadingMore(false);
+        if (version === queryVersionRef.current) {
+          isFetchingListRef.current = false;
+          setIsLoadingMore(false);
+        }
       }
     },
     []
@@ -130,9 +157,8 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
       clearTimeout(searchDebounceRef.current);
     }
 
+    resetPagination();
     searchDebounceRef.current = setTimeout(() => {
-      setPage(1);
-      setHasMore(true);
       fetchConversations(1, activeFilterRef.current, val, false);
     }, 300);
   };
@@ -143,8 +169,7 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
     if (searchDebounceRef.current) {
       clearTimeout(searchDebounceRef.current);
     }
-    setPage(1);
-    setHasMore(true);
+    resetPagination();
     fetchConversations(1, activeFilterRef.current, "", false);
   };
 
@@ -152,17 +177,16 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
     if (newFilter === activeFilter) return;
     setActiveFilter(newFilter);
     setConversations([]);
-    setPage(1);
-    setHasMore(true);
+    resetPagination();
     fetchConversations(1, newFilter, searchQueryRef.current, false);
   };
 
   const handleSidebarScroll = (e: React.UIEvent<HTMLDivElement>) => {
     const target = e.currentTarget;
-    if (isLoadingMore || !hasMore) return;
+    if (isFetchingListRef.current || !hasMore) return;
     const scrollBottom = target.scrollHeight - target.scrollTop - target.clientHeight;
     if (scrollBottom < 80) {
-      fetchConversations(page + 1, activeFilterRef.current, searchQueryRef.current, true);
+      void fetchConversations(pageRef.current + 1, activeFilterRef.current, searchQueryRef.current, true);
     }
   };
 
@@ -283,12 +307,8 @@ export default function ChatContainer({ tenantId }: { tenantId: string }) {
           lastMessage: msg,
         };
 
-        if (index !== -1) {
-          const filtered = prev.filter((_, i) => i !== index);
-          return [updatedConv, ...filtered];
-        } else {
-          return [updatedConv, ...prev];
-        }
+        const filtered = prev.filter((c) => c.customerId !== msg.customerId);
+        return [updatedConv, ...filtered];
       });
     };
 

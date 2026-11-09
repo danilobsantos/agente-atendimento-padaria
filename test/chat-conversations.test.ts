@@ -1,5 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { mergeUniqueConversations } from "../src/lib/utils/chat-merge";
 
 interface MockChatMessage {
   id: string;
@@ -257,4 +258,29 @@ test("search by customer name or phone number filters conversations correctly", 
   assert.equal(searchIa.length, 3);
   assert.deepEqual(searchIa.map((c) => c.customerId), ["2", "3", "4"]);
 });
+
+test("mergeUniqueConversations deduplica customerId ao anexar páginas", () => {
+  const prev = [{ customerId: "a" }, { customerId: "b" }];
+  const next = [{ customerId: "b" }, { customerId: "c" }];
+  const result = mergeUniqueConversations(prev, next);
+  assert.deepEqual(result.map((c) => c.customerId), ["a", "b", "c"]);
+});
+
+test("mergeUniqueConversations: anexar a mesma página várias vezes não gera duplicatas", () => {
+  const page = [{ customerId: "a" }, { customerId: "b" }, { customerId: "c" }];
+  let state: Array<{ customerId: string }> = [];
+  for (let i = 0; i < 8; i++) {
+    state = mergeUniqueConversations(state, page);
+  }
+  assert.equal(state.length, 3);
+  assert.deepEqual(state.map((c) => c.customerId), ["a", "b", "c"]);
+});
+
+test("mergeUniqueConversations limpa duplicatas pré-existentes no estado", () => {
+  const prev = [{ customerId: "a" }, { customerId: "a" }, { customerId: "b" }];
+  const result = mergeUniqueConversations(prev, []);
+  assert.equal(result.length, 2);
+  assert.deepEqual(result.map((c) => c.customerId), ["a", "b"]);
+});
+
 
