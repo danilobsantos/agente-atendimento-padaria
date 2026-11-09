@@ -52,6 +52,7 @@ COPY --from=builder /app/public ./public
 COPY --from=builder /app/prisma ./prisma
 COPY --from=builder /app/src/generated ./src/generated
 COPY --from=builder /app/src/server ./src/server
+COPY --from=builder /app/src/lib ./src/lib
 
 EXPOSE 3000 3001
 
